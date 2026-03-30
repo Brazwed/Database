@@ -2,34 +2,29 @@
 
 # ============================================================
 # Database Toolkit - Setup
-# Bridge: provisiona VPS e gerencia bancos individuais
 # ============================================================
 
-# --- Configuração (edite aqui se fizer fork) ---
 GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
 
-# Formato: name|display|port|repo|container|dir
 DATABASES="postgres|PostgreSQL 16|5432|db-postgres|postgres|/opt/db-postgres
 dragonfly|DragonflyDB|6379|db-dragonfly|dragonfly|/opt/db-dragonfly"
 
 # Cores
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-NC='\033[0m'
+R='\033[0;31m'; G='\033[0;32m'; Y='\033[1;33m'; B='\033[0;34m'
+C='\033[0;36m'; BD='\033[1m'; NC='\033[0m'
 
-log()   { echo -e "${GREEN}[✔]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
-err()   { echo -e "${RED}[✘]${NC} $1"; exit 1; }
-info()  { echo -e "${BLUE}[●]${NC} $1"; }
+log()  { echo -e "${G}[✔]${NC} $1"; }
+warn() { echo -e "${Y}[!]${NC} $1"; }
+err()  { echo -e "${R}[✘]${NC} $1"; exit 1; }
+info() { echo -e "${B}[●]${NC} $1"; }
 
 confirm() {
-    local prompt="${1:-Confirmar?}"
-    read -rp "$prompt [Y/n] " c
+    read -rp "${1:-Confirmar?} [Y/n] " c
     [[ -z "$c" || "$c" =~ ^[yY]$ ]]
+}
+
+pause() {
+    read -rp "  Pressione Enter..." _
 }
 
 has_docker() {
@@ -37,20 +32,16 @@ has_docker() {
 }
 
 get_container_status() {
-    local container="$1"
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$container" && echo "running" || echo "stopped"
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$1" && echo "running" || echo "stopped"
 }
 
 parse_db() {
-    local db="$1"
-    local field="$2"
-    echo "$DATABASES" | grep "^${db}|" | cut -d'|' -f"$field"
+    echo "$DATABASES" | grep "^${1}|" | cut -d'|' -f"$2"
 }
 
 db_exists() {
-    local db="$1"
     local dir
-    dir=$(parse_db "$db" 6)
+    dir=$(parse_db "$1" 6)
     [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]
 }
 
@@ -58,45 +49,41 @@ get_installed_list() {
     local result=""
     while IFS='|' read -r name display port repo container dir; do
         [ -z "$name" ] && continue
-        [ -z "$dir" ] && continue
         if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
             local st
             st=$(get_container_status "$container")
-            result="${result}${name}|${display}|${port}|${st}|${dir}
-"
+            result="${result}${name}|${display}|${port}|${st}|${dir}\n"
         fi
     done <<< "$DATABASES"
-    printf '%s' "$result"
+    printf '%b' "$result"
 }
 
-# --- Instalação de Infraestrutura ---
+# ============================================================
+# INSTALAÇÃO DE INFRA
+# ============================================================
 
 install_infra() {
     echo ""
-    echo -e "${BOLD}${CYAN}=== Instalar Infraestrutura ===${NC}"
+    echo -e "${BD}${C}=== Instalar Infraestrutura ===${NC}"
     echo ""
-    echo "  Docker Engine + Compose v2"
-    echo "  Firewall (UFW)"
-    echo "  Swap 1GB"
-    echo "  Atualizações automáticas de segurança"
+    echo "  - Docker Engine + Compose v2"
+    echo "  - Firewall (UFW)"
+    echo "  - Swap 1GB"
+    echo "  - Updates automáticos de segurança"
     echo ""
+    confirm "Instalar?" || return 0
 
-    confirm "Instalar infraestrutura?" || return 0
-
     echo ""
-    echo "--- Atualizando sistema ---"
-    apt-get update -y
-    apt-get upgrade -y
+    echo -e "${BD}--- Atualizando sistema ---${NC}"
+    apt-get update -y && apt-get upgrade -y
     apt-get install -y curl git ca-certificates gnupg lsb-release apt-transport-https software-properties-common
     log "Sistema atualizado"
 
     echo ""
-    echo "--- Swap ---"
+    echo -e "${BD}--- Swap ---${NC}"
     if [ ! -f /swapfile ]; then
         fallocate -l 1G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=1024
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
+        chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
         echo '/swapfile none swap sw 0 0' >> /etc/fstab
         log "Swap 1GB criado"
     else
@@ -104,9 +91,9 @@ install_infra() {
     fi
 
     echo ""
-    echo "--- Docker ---"
+    echo -e "${BD}--- Docker ---${NC}"
     if has_docker; then
-        info "Docker já instalado e rodando"
+        info "Docker já instalado"
     else
         install -m 0755 -d /etc/apt/keyrings
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -114,22 +101,16 @@ install_infra() {
         echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
         apt-get update -y
         apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-        systemctl enable docker
-        systemctl start docker
+        systemctl enable docker && systemctl start docker
         log "Docker instalado"
     fi
 
     echo ""
-    echo "--- Firewall ---"
-    if command -v ufw &>/dev/null; then
-        info "UFW já instalado"
-    else
-        apt-get install -y ufw
-    fi
+    echo -e "${BD}--- Firewall ---${NC}"
+    command -v ufw &>/dev/null || apt-get install -y ufw
 
-    if confirm "Liberar portas no firewall? (22 SSH, 5432 PG, 6379 Dragonfly)"; then
-        ufw default deny incoming
-        ufw default allow outgoing
+    if confirm "Liberar portas? (22 SSH, 5432 PG, 6379 Dragonfly)"; then
+        ufw default deny incoming && ufw default allow outgoing
         ufw allow 22/tcp comment "SSH"
         ufw allow 5432/tcp comment "PostgreSQL"
         ufw allow 6379/tcp comment "DragonflyDB"
@@ -138,23 +119,22 @@ install_infra() {
     fi
 
     echo ""
-    echo "--- Atualizações automáticas ---"
+    echo -e "${BD}--- Updates automáticos ---${NC}"
     apt-get install -y unattended-upgrades
-    cat > /etc/apt/apt.conf.d/20auto-upgrades << 'UPEOF'
+    cat > /etc/apt/apt.conf.d/20auto-upgrades << 'EOF'
 APT::Periodic::Update-Package-Lists "1";
 APT::Periodic::Unattended-Upgrade "1";
 APT::Periodic::AutocleanInterval "7";
-UPEOF
-    log "Unattended-upgrades configurado"
-
+EOF
     log "Infraestrutura pronta!"
 }
 
-# --- Instalação de Banco ---
+# ============================================================
+# INSTALAÇÃO DE BANCO
+# ============================================================
 
 install_db() {
-    local db="$1"
-    local advanced="${2:-false}"
+    local db="$1" advanced="${2:-false}"
     local display default_port repo container
 
     display=$(parse_db "$db" 2)
@@ -162,145 +142,117 @@ install_db() {
     repo=$(parse_db "$db" 4)
     container=$(parse_db "$db" 5)
 
-    local dir="/opt/db-${db}"
-    local port="$default_port"
+    local dir="/opt/db-${db}" port="$default_port"
 
     if [ "$advanced" = "true" ]; then
         echo ""
-        echo -e "${BOLD}${CYAN}--- $display ---${NC}"
-        read -rp "  Pasta [$dir]: " custom_dir
-        [ -n "$custom_dir" ] && dir="$custom_dir"
-        read -rp "  Porta [$default_port]: " custom_port
-        [ -n "$custom_port" ] && port="$custom_port"
+        echo -e "${BD}${C}--- $display ---${NC}"
+        read -rp "  Pasta [$dir]: " x; [ -n "$x" ] && dir="$x"
+        read -rp "  Porta [$default_port]: " x; [ -n "$x" ] && port="$x"
     fi
 
     mkdir -p "$dir"
 
     if [ -d "$dir/.git" ]; then
-        info "Repo existe, atualizando..."
+        info "Atualizando repo..."
         (cd "$dir" && git pull --quiet) || true
     else
         info "Baixando $display..."
         git clone --quiet "${GITHUB_BASE}/${repo}.git" "$dir"
     fi
 
-    # Copia .env e configura
     if [ -f "$dir/.env.example" ] && [ ! -f "$dir/.env" ]; then
         cp "$dir/.env.example" "$dir/.env"
-
-        if [ "$db" = "postgres" ]; then
-            [ "$port" != "$default_port" ] && sed -i "s/^PG_PORT=.*/PG_PORT=$port/" "$dir/.env"
-        elif [ "$db" = "dragonfly" ]; then
-            [ "$port" != "$default_port" ] && sed -i "s/^DF_PORT=.*/DF_PORT=$port/" "$dir/.env"
-        fi
+        [ "$db" = "postgres" ] && [ "$port" != "$default_port" ] && sed -i "s/^PG_PORT=.*/PG_PORT=$port/" "$dir/.env"
+        [ "$db" = "dragonfly" ] && [ "$port" != "$default_port" ] && sed -i "s/^DF_PORT=.*/DF_PORT=$port/" "$dir/.env"
     fi
 
     chmod +x "$dir"/*.sh 2>/dev/null || true
 
     info "Subindo $display..."
-    (cd "$dir" && docker compose -f docker-compose.yml up -d 2>&1)
+    (cd "$dir" && docker compose up -d 2>&1)
 
     sleep 3
 
-    local status
-    status=$(get_container_status "$container")
-    if [ "$status" = "running" ]; then
+    local st
+    st=$(get_container_status "$container")
+    if [ "$st" = "running" ]; then
         log "$display rodando na porta $port"
     else
-        warn "$display pode não ter iniciado. Verifique: cd $dir && docker compose logs"
+        warn "$display pode não ter iniciado"
     fi
 
-    if [ -f "$dir/info.sh" ]; then
-        bash "$dir/info.sh"
-    fi
+    [ -f "$dir/info.sh" ] && bash "$dir/info.sh"
 }
 
-# --- Gerenciamento ---
+# ============================================================
+# GERENCIAMENTO
+# ============================================================
 
 update_db() {
-    local db="$1"
     local dir display
-    dir=$(parse_db "$db" 6)
-    display=$(parse_db "$db" 2)
-
+    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
     [ -d "$dir/.git" ] || err "Repo não encontrado em $dir"
-
     info "Atualizando $display..."
-    (cd "$dir" && git pull --quiet && docker compose -f docker-compose.yml restart 2>&1)
+    (cd "$dir" && git pull --quiet && docker compose restart 2>&1)
     log "$display atualizado!"
 }
 
 down_db() {
-    local db="$1"
     local dir display
-    dir=$(parse_db "$db" 6)
-    display=$(parse_db "$db" 2)
-
-    (cd "$dir" && docker compose -f docker-compose.yml down --timeout 10 2>&1)
+    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
+    (cd "$dir" && docker compose down --timeout 10 2>&1)
     log "$display parado!"
 }
 
 status_db() {
-    local db="$1"
     local dir display port container
-    dir=$(parse_db "$db" 6)
-    display=$(parse_db "$db" 2)
-    port=$(parse_db "$db" 3)
-    container=$(parse_db "$db" 5)
+    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
+    port=$(parse_db "$1" 3); container=$(parse_db "$1" 5)
 
     echo ""
-    echo -e "${BOLD}${CYAN}=== $display ===${NC}"
+    echo -e "${BD}${C}=== $display ===${NC}"
     echo "  Pasta:  $dir"
     echo "  Porta:  $port"
 
     local st
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
-        echo -e "  Status: ${GREEN}running${NC}"
+        echo -e "  Status: ${G}running${NC}"
+        [ -f "$dir/info.sh" ] && echo "" && bash "$dir/info.sh"
     else
-        echo -e "  Status: ${RED}stopped${NC}"
-    fi
-
-    if [ "$st" = "running" ] && [ -f "$dir/info.sh" ]; then
-        echo ""
-        bash "$dir/info.sh"
+        echo -e "  Status: ${R}stopped${NC}"
     fi
 }
 
 remove_db() {
-    local db="$1"
     local dir display
-    dir=$(parse_db "$db" 6)
-    display=$(parse_db "$db" 2)
-
-    warn "Isso vai PARAR e REMOVER $display completamente"
+    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
+    warn "Isso vai PARAR e REMOVER $display"
     confirm "Tem certeza?" || return 0
-
-    (cd "$dir" && docker compose -f docker-compose.yml down -v --timeout 10 2>&1)
+    (cd "$dir" && docker compose down -v --timeout 10 2>&1)
     rm -rf "$dir"
     log "$display removido!"
 }
 
-# --- Seleção múltipla ---
+# ============================================================
+# SELEÇÃO (stdout = dados, stderr = display)
+# ============================================================
 
 resolve_db_list() {
-    local input="$1"
-    local dbs=""
+    local input="$1" dbs=""
 
     if [ "$input" = "all" ]; then
-        while IFS='|' read -r name _rest; do
+        while IFS='|' read -r name _; do
             [ -n "$name" ] && dbs="$dbs $name"
         done <<< "$DATABASES"
         echo "$dbs"
         return 0
     fi
 
-    local OLDIFS="$IFS"
     IFS=',' read -ra choices <<< "$input"
-    IFS="$OLDIFS"
-
     local idx=1
-    while IFS='|' read -r name _rest; do
+    while IFS='|' read -r name _; do
         [ -z "$name" ] && continue
         for ch in "${choices[@]}"; do
             ch=$(echo "$ch" | tr -d ' ')
@@ -314,11 +266,83 @@ resolve_db_list() {
     echo "$dbs"
 }
 
+select_db_to_install() {
+    # Menu → stderr (usuário vê)
+    echo "" >&2
+    echo -e "${BD}${C}Selecione banco(s):${NC}" >&2
+    echo "" >&2
+
+    local idx=1
+    while IFS='|' read -r name display port _; do
+        [ -z "$name" ] && continue
+        if db_exists "$name"; then
+            echo -e "  [$idx] $display (porta $port) ${G}já instalado${NC}" >&2
+        else
+            echo "  [$idx] $display (porta $port)" >&2
+        fi
+        idx=$((idx + 1))
+    done <<< "$DATABASES"
+
+    local total=$((idx - 1))
+    local prompt
+
+    if [ "$total" -gt 1 ]; then
+        echo "  [$((total + 1))] Todos" >&2
+        echo "" >&2
+        prompt="Escolha (ex: 1,2 ou 3)"
+    else
+        echo "" >&2
+        prompt="Escolha (1 para instalar)"
+    fi
+
+    read -rp "$prompt: " choices >&2
+
+    if [ "$total" -gt 1 ] && [ "$choices" = "$((total + 1))" ]; then
+        choices="all"
+    fi
+    [ -z "$choices" ] && choices="1"
+
+    # Seleção → stdout (capturado)
+    resolve_db_list "$choices"
+}
+
+select_installed_db() {
+    local prompt="$1"
+    local installed_raw
+    installed_raw=$(get_installed_list)
+
+    if [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
+        warn "Nenhum banco instalado" >&2
+        return 1
+    fi
+
+    echo "" >&2
+    local idx=1
+    local names=()
+    while IFS='|' read -r name display _; do
+        [ -z "$name" ] && continue
+        echo "  [$idx] $display" >&2
+        names+=("$name")
+        idx=$((idx + 1))
+    done <<< "$installed_raw"
+
+    echo "" >&2
+    read -rp "  $prompt (número): " ch >&2
+
+    if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#names[@]}" ] 2>/dev/null; then
+        echo "${names[$((ch - 1))]}"  # stdout
+        return 0
+    fi
+
+    warn "Seleção inválida" >&2
+    return 1
+}
+
 show_summary() {
     local dbs="$1"
 
     echo ""
-    echo -e "${BOLD}${CYAN}=== Resumo ===${NC}"
+    echo -e "${BD}${C}=== Resumo ===${NC}"
     echo ""
 
     for db in $dbs; do
@@ -332,46 +356,36 @@ show_summary() {
     echo ""
 }
 
-install_multiple() {
-    local dbs="$1"
-    local advanced="${2:-false}"
-
-    for db in $dbs; do
-        echo ""
-        install_db "$db" "$advanced"
-    done
-}
-
-# --- Menu principal ---
+# ============================================================
+# MENU PRINCIPAL
+# ============================================================
 
 show_main_menu() {
-    local installed_raw
+    local installed_raw has_installed=false
     installed_raw=$(get_installed_list)
-    local has_installed=false
-    if [ -n "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
-        has_installed=true
-    fi
+    [ -n "$(echo "$installed_raw" | tr -d '[:space:]')" ] && has_installed=true
 
+    clear
     echo ""
-    echo -e "${BOLD}${CYAN}=== Database Toolkit ===${NC}"
+    echo -e "${BD}${C}╔══════════════════════════════════════╗${NC}"
+    echo -e "${BD}${C}║       Database Toolkit               ║${NC}"
+    echo -e "${BD}${C}╚══════════════════════════════════════╝${NC}"
     echo ""
 
-    # Mostra bancos instalados
     if [ "$has_installed" = "true" ]; then
-        echo "  Bancos instalados:"
+        echo -e "  ${BD}Bancos instalados:${NC}"
         while IFS='|' read -r name display port status dir; do
             [ -z "$name" ] && continue
-            [ -z "$display" ] && continue
             if [ "$status" = "running" ]; then
-                echo -e "    ${GREEN}●${NC} $display (porta $port) — rodando"
+                echo -e "    ${G}●${NC} $display (porta $port) — rodando"
             else
-                echo -e "    ${RED}●${NC} $display (porta $port) — parado"
+                echo -e "    ${R}●${NC} $display (porta $port) — parado"
             fi
         done <<< "$installed_raw"
         echo ""
     fi
 
-    echo "  Ações:"
+    echo -e "  ${BD}Ações:${NC}"
     echo "    [1] Adicionar banco(s)"
 
     if has_docker; then
@@ -380,89 +394,16 @@ show_main_menu() {
         echo "    [4] Status"
         echo "    [5] Remover banco"
     else
-        echo -e "    [2-5] ${YELLOW}(Docker não instalado — instale com [1])${NC}"
+        echo -e "    [2-5] ${Y}(Docker não instalado — use [1])${NC}"
     fi
 
     echo "    [0] Sair"
     echo ""
 }
 
-select_installed_db() {
-    local prompt="$1"
-    local installed_raw
-    installed_raw=$(get_installed_list)
-
-    if [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
-        warn "Nenhum banco instalado"
-        return 1
-    fi
-
-    echo ""
-    local idx=1
-    local names=()
-    while IFS='|' read -r name display _rest; do
-        [ -z "$name" ] && continue
-        [ -z "$display" ] && continue
-        echo "  [$idx] $display"
-        names+=("$name")
-        idx=$((idx + 1))
-    done <<< "$installed_raw"
-
-    echo ""
-    read -rp "  $prompt (número): " ch
-
-    if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#names[@]}" ] 2>/dev/null; then
-        echo "${names[$((ch - 1))]}"
-        return 0
-    fi
-
-    warn "Seleção inválida"
-    return 1
-}
-
-select_db_to_install() {
-    echo ""
-    echo -e "${BOLD}${CYAN}Selecione banco(s) para instalar:${NC}"
-    echo ""
-
-    local idx=1
-    while IFS='|' read -r name display port _rest; do
-        [ -z "$name" ] && continue
-        [ -z "$display" ] && continue
-        if db_exists "$name"; then
-            echo -e "  [$idx] $display (porta $port) ${GREEN}já instalado${NC}"
-        else
-            echo "  [$idx] $display (porta $port)"
-        fi
-        idx=$((idx + 1))
-    done <<< "$DATABASES"
-
-    local total=$((idx - 1))
-    if [ "$total" -gt 1 ]; then
-        echo "  [$((total + 1))] Todos"
-        echo ""
-        read -rp "Escolha (ex: 1 ou 1,2 ou 3): " choices
-        if [ "$choices" = "$((total + 1))" ]; then
-            choices="all"
-        fi
-    else
-        echo ""
-        read -rp "Escolha (1 para instalar): " choices
-        [ -z "$choices" ] && choices="1"
-    fi
-
-    local selected
-    selected=$(resolve_db_list "$choices")
-
-    if [ -z "$(echo "$selected" | tr -d ' ')" ]; then
-        warn "Nenhum banco selecionado"
-        return 1
-    fi
-
-    echo "$selected"
-}
-
-# --- Modo direto (args) ---
+# ============================================================
+# MODO DIRETO (ARGS)
+# ============================================================
 
 parse_args() {
     local action="${1:-}"
@@ -470,7 +411,6 @@ parse_args() {
     local args="$*"
     local advanced=false
 
-    # Detecta --advanced
     for arg in $args; do
         if [ "$arg" = "--advanced" ]; then
             advanced=true
@@ -480,30 +420,22 @@ parse_args() {
 
     case "$action" in
         add)
+            local selected
             if [ -z "$args" ]; then
-                local selected
                 selected=$(select_db_to_install) || exit 0
-                show_summary "$selected"
-                confirm || exit 0
-                install_multiple "$selected" "$advanced"
-                log "Pronto!"
             else
                 local dbs=""
                 for arg in $args; do
-                    if [ "$arg" = "all" ]; then
-                        dbs=$(resolve_db_list "all")
-                    else
-                        local resolved
-                        resolved=$(resolve_db_list "$arg")
-                        dbs="$dbs $resolved"
-                    fi
+                    [ "$arg" = "all" ] && dbs=$(resolve_db_list "all") && break
+                    local resolved; resolved=$(resolve_db_list "$arg")
+                    dbs="$dbs $resolved"
                 done
-                dbs=$(echo "$dbs" | xargs)
-                show_summary "$dbs"
-                confirm || exit 0
-                install_multiple "$dbs" "$advanced"
-                log "Pronto!"
+                selected=$(echo "$dbs" | xargs)
             fi
+            show_summary "$selected"
+            confirm || exit 0
+            for db in $selected; do install_db "$db" "$advanced"; done
+            log "Pronto!"
             ;;
         update)
             [ -z "$args" ] && err "Uso: $0 update <postgres|dragonfly>"
@@ -515,7 +447,7 @@ parse_args() {
             ;;
         status)
             if [ -z "$args" ]; then
-                while IFS='|' read -r name _rest; do
+                while IFS='|' read -r name _; do
                     [ -n "$name" ] && db_exists "$name" && status_db "$name"
                 done <<< "$DATABASES"
             else
@@ -531,20 +463,22 @@ parse_args() {
             ;;
         *)
             err "Uso:
-  $0                         (menu interativo)
+  $0                         menu interativo
   $0 add [db] [--advanced]   adicionar banco(s)
   $0 update <db>             atualizar banco
   $0 down <db>               parar banco
   $0 status [db]             ver status
   $0 remove <db>             remover banco
-  $0 infra                   instalar só infraestrutura
+  $0 infra                   instalar infraestrutura
 
 Bancos: postgres, dragonfly, all"
             ;;
     esac
 }
 
-# --- Loop interativo ---
+# ============================================================
+# LOOP INTERATIVO
+# ============================================================
 
 interactive_menu() {
     while true; do
@@ -553,72 +487,54 @@ interactive_menu() {
 
         case "$choice" in
             1)
-                # Adicionar banco
                 local advanced=false
                 if has_docker; then
-                    read -rp "  Modo avançado? (customizar local/porta) [y/N] " adv
+                    read -rp "  Avançado? (customizar local/porta) [y/N] " adv
                     [[ "$adv" =~ ^[yY]$ ]] && advanced=true
                 else
                     echo ""
-                    if confirm "Docker não encontrado. Instalar infraestrutura primeiro?"; then
+                    if confirm "Docker não encontrado. Instalar infraestrutura?"; then
                         install_infra
                     else
-                        warn "Docker é necessário para instalar bancos"
-                        continue
+                        warn "Docker é necessário"
+                        pause; continue
                     fi
                 fi
 
                 local selected
-                selected=$(select_db_to_install) || continue
+                selected=$(select_db_to_install) || { pause; continue; }
                 show_summary "$selected"
+                confirm || { pause; continue; }
 
-                if [ "$advanced" = "true" ]; then
-                    echo ""
-                    for db in $selected; do
-                        local display default_port dir="/opt/db-${db}" port="$default_port"
-                        display=$(parse_db "$db" 2)
-                        default_port=$(parse_db "$db" 3)
-                        echo -e "${BOLD}${CYAN}--- $display ---${NC}"
-                        read -rp "  Pasta [$dir]: " custom_dir
-                        [ -n "$custom_dir" ] && dir="$custom_dir"
-                        read -rp "  Porta [$default_port]: " custom_port
-                        [ -n "$custom_port" ] && port="$custom_port"
-                    done
-                fi
-
-                confirm || continue
-                install_multiple "$selected" "$advanced"
+                for db in $selected; do
+                    install_db "$db" "$advanced"
+                done
                 log "Pronto!"
-                echo ""
-                read -rp "  Pressione Enter para continuar..." _
+                pause
                 ;;
             2)
                 local db_name
-                db_name=$(select_installed_db "Qual banco atualizar?") || continue
+                db_name=$(select_installed_db "Qual banco atualizar?") || { pause; continue; }
                 update_db "$db_name"
-                echo ""
-                read -rp "  Pressione Enter para continuar..." _
+                pause
                 ;;
             3)
                 local db_name
-                db_name=$(select_installed_db "Qual banco parar?") || continue
+                db_name=$(select_installed_db "Qual banco parar?") || { pause; continue; }
                 down_db "$db_name"
-                echo ""
-                read -rp "  Pressione Enter para continuar..." _
+                pause
                 ;;
             4)
-                while IFS='|' read -r name _rest; do
+                while IFS='|' read -r name _; do
                     [ -n "$name" ] && db_exists "$name" && status_db "$name"
                 done <<< "$DATABASES"
-                echo ""
-                read -rp "  Pressione Enter para continuar..." _
+                pause
                 ;;
             5)
                 local db_name
-                db_name=$(select_installed_db "Qual banco remover?") || continue
+                db_name=$(select_installed_db "Qual banco remover?") || { pause; continue; }
                 remove_db "$db_name"
-                echo ""
-                read -rp "  Pressione Enter para continuar..." _
+                pause
                 ;;
             0)
                 echo ""
@@ -632,12 +548,12 @@ interactive_menu() {
     done
 }
 
-# --- Main ---
+# ============================================================
+# MAIN
+# ============================================================
 
 main() {
-    if [ "$(id -u)" -ne 0 ]; then
-        err "Execute como root: sudo $0"
-    fi
+    [ "$(id -u)" -ne 0 ] && err "Execute como root: sudo $0"
 
     if [ -n "${1:-}" ]; then
         parse_args "$@"
