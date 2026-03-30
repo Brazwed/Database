@@ -6,8 +6,8 @@ set -euo pipefail
 # Bridge: provisiona VPS e gerencia bancos individuais
 # ============================================================
 
-# --- Configuração ---
-GITHUB_BASE="https://github.com/brazwed"
+# --- Configuração (edite aqui se fizer fork) ---
+GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
 INSTALL_DIR="/opt"
 
 # Formato: name|display|port|repo|container|dir
@@ -36,12 +36,33 @@ confirm() {
 
 get_container_status() {
     local container="$1"
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$" && echo "running" || echo "stopped"
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$container" && echo "running" || echo "stopped"
 }
 
 is_port_free() {
     local port="$1"
     ! ss -tln 2>/dev/null | grep -q ":$port " && ! ss -uln 2>/dev/null | grep -q ":$port "
+}
+
+parse_db() {
+    local db="$1"
+    local field="$2"
+    echo "$DATABASES" | grep "^$db|" | cut -d'|' -f"$field"
+}
+
+detect_installed() {
+    local installed=""
+
+    while IFS='|' read -r name display port repo container dir; do
+        [ -z "$name" ] && continue
+        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
+            local status
+            status=$(get_container_status "$container")
+            installed="${installed}${name}|${display}|${port}|${status}|${dir}\n"
+        fi
+    done <<< "$DATABASES"
+
+    echo -e "$installed"
 }
 
 ask_install_location() {
@@ -102,27 +123,6 @@ ask_port() {
     done
 }
 
-parse_db() {
-    local db="$1"
-    local field="$2"
-    echo "$DATABASES" | grep "^$db|" | cut -d'|' -f"$field"
-}
-
-detect_installed() {
-    local installed=""
-
-    while IFS='|' read -r name display port repo container dir; do
-        [ -z "$name" ] && continue
-        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
-            local status
-            status=$(get_container_status "$container")
-            installed="${installed}${name}|${display}|${port}|${status}|${dir}\n"
-        fi
-    done <<< "$DATABASES"
-
-    echo -e "$installed"
-}
-
 # --- Ações de Infraestrutura ---
 
 install_infra() {
@@ -137,7 +137,6 @@ install_infra() {
 
     confirm "Instalar?" || return 0
 
-    # System update
     echo ""
     echo "--- Atualizando sistema ---"
     apt-get update -y
@@ -145,7 +144,6 @@ install_infra() {
     apt-get install -y curl git ca-certificates gnupg lsb-release apt-transport-https software-properties-common
     log "Sistema atualizado"
 
-    # Swap
     echo ""
     echo "--- Swap ---"
     if [ ! -f /swapfile ]; then
@@ -159,7 +157,6 @@ install_infra() {
         info "Swap já existe"
     fi
 
-    # Docker
     echo ""
     echo "--- Docker ---"
     if command -v docker &>/dev/null; then
@@ -177,7 +174,6 @@ install_infra() {
     systemctl enable docker
     systemctl start docker
 
-    # Firewall
     echo ""
     echo "--- Firewall ---"
     if command -v ufw &>/dev/null; then
@@ -197,7 +193,6 @@ install_infra() {
         log "Firewall configurado"
     fi
 
-    # Unattended upgrades
     echo ""
     echo "--- Updates automáticos ---"
     apt-get install -y unattended-upgrades
@@ -237,14 +232,11 @@ install_db() {
     mkdir -p "$dir"
 
     if [ -d "$dir/.git" ]; then
-        cd "$dir"
         info "Repo existe, atualizando..."
-        git pull
+        (cd "$dir" && git pull)
     else
-        cd "$(dirname "$dir")"
         info "Baixando repo..."
-        git clone "${GITHUB_BASE}/${repo}.git" "$(basename "$dir")"
-        cd "$dir"
+        git clone "${GITHUB_BASE}/${repo}.git" "$dir"
     fi
 
     # Copia .env e configura porta
@@ -262,16 +254,16 @@ install_db() {
     chmod +x "$dir"/*.sh 2>/dev/null || true
 
     info "Subindo container..."
-    docker compose up -d
+    (cd "$dir" && docker compose -f docker-compose.yml up -d)
 
-    sleep 2
+    sleep 3
 
     local status
     status=$(get_container_status "$container")
     if [ "$status" = "running" ]; then
         log "$display rodando na porta $port"
     else
-        warn "$display pode não ter iniciado. Verifique: docker compose ps"
+        warn "$display pode não ter iniciado. Verifique: cd $dir && docker compose logs"
     fi
 
     if [ -f "$dir/info.sh" ]; then
@@ -288,10 +280,8 @@ update_db() {
 
     [ -d "$dir/.git" ] || err "Repo não encontrado em $dir"
 
-    cd "$dir"
     info "Atualizando $display..."
-    git pull
-    docker compose restart
+    (cd "$dir" && git pull && docker compose -f docker-compose.yml restart)
     log "$display atualizado!"
 }
 
@@ -302,10 +292,8 @@ redeploy_db() {
     dir=$(parse_db "$db" 6)
     display=$(parse_db "$db" 2)
 
-    cd "$dir"
     info "Redeploying $display..."
-    docker compose down
-    docker compose up -d
+    (cd "$dir" && docker compose -f docker-compose.yml down && docker compose -f docker-compose.yml up -d)
     log "$display redeployado!"
 }
 
@@ -316,8 +304,7 @@ down_db() {
     dir=$(parse_db "$db" 6)
     display=$(parse_db "$db" 2)
 
-    cd "$dir"
-    docker compose down
+    (cd "$dir" && docker compose -f docker-compose.yml down --timeout 10)
     log "$display parado!"
 }
 
@@ -343,7 +330,7 @@ status_db() {
         bash "$dir/info.sh"
     fi
 
-    docker compose -f "$dir/docker-compose.yml" ps 2>/dev/null
+    (cd "$dir" && docker compose -f docker-compose.yml ps 2>/dev/null)
 }
 
 uninstall_db() {
@@ -356,8 +343,7 @@ uninstall_db() {
     warn "Isso vai PARAR e REMOVER o container do $display"
     confirm "Tem certeza?" || return 0
 
-    cd "$dir"
-    docker compose down -v
+    (cd "$dir" && docker compose -f docker-compose.yml down -v --timeout 10)
     rm -rf "$dir"
     log "$display removido!"
 }
@@ -382,6 +368,26 @@ show_menu() {
 main() {
     if [ "$(id -u)" -ne 0 ]; then
         err "Execute como root: sudo $0"
+    fi
+
+    # Modo direto: ./setup.sh <db_name>
+    if [ -n "${1:-}" ]; then
+        local action="${1}"
+        case "$action" in
+            postgres|dragonfly)
+                warn "Instalar $action?"
+                confirm "Confirmar?" || exit 0
+                install_db "$action"
+                log "$action instalado!"
+                ;;
+            infra)
+                install_infra
+                ;;
+            *)
+                err "Uso: $0 [postgres|dragonfly|infra] ou $0 (menu interativo)"
+                ;;
+        esac
+        exit 0
     fi
 
     echo ""

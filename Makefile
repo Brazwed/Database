@@ -45,9 +45,13 @@ info: ## Connection info for all databases
 	@for db in $(DATABASES); do [ -f ./$$db/info.sh ] && ./$$db/info.sh 2>/dev/null || echo "[skip] $$db not configured"; done
 
 clean: ## Remove all data (DATA LOSS)
-	@echo "This will delete ALL database data"
-	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-	@for db in $(DATABASES); do [ -f ./$$db/start.sh ] && ./$$db/start.sh clean <<< "y"; done
+	@for db in $(DATABASES); do \
+		if [ -f ./$$db/start.sh ]; then \
+			echo ""; \
+			echo "=== $$db ==="; \
+			./$$db/start.sh clean; \
+		fi; \
+	done
 
 # --- Dynamic per-database targets ---
 
