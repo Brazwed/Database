@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 
 # ============================================================
-# Database Toolkit - Setup
+# Database Toolkit - Menu Mock (TESTE)
 # ============================================================
 
-GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
+# --- Cenários ---
+MOCK_DOCKER=false
+MOCK_INSTALLED=""
+
+# MOCK_DOCKER=true; MOCK_INSTALLED=""  # Docker sem bancos
+# MOCK_DOCKER=true; MOCK_INSTALLED="postgres|PostgreSQL 16|5432|running|/opt/db-postgres"  # PG rodando
+# MOCK_DOCKER=true; MOCK_INSTALLED="postgres|PostgreSQL 16|5432|running|/opt/db-postgres\ndragonfly|DragonflyDB|6379|stopped|/opt/db-dragonfly"  # PG + DF
+
+# ============================================================
 
 DATABASES="postgres|PostgreSQL 16|5432|db-postgres|postgres|/opt/db-postgres
 dragonfly|DragonflyDB|6379|db-dragonfly|dragonfly|/opt/db-dragonfly"
@@ -14,8 +22,8 @@ C='\033[0;36m'; BD='\033[1m'; NC='\033[0m'
 
 log()  { echo -e "${G}[✔]${NC} $1"; }
 warn() { echo -e "${Y}[!]${NC} $1"; }
-err()  { echo -e "${R}[✘]${NC} $1"; exit 1; }
 info() { echo -e "${B}[●]${NC} $1"; }
+mock() { echo -e "${Y}[MOCK]${NC} $1"; }
 
 confirm() {
     read -rp "${1:-Confirmar?} [Y/n] " c
@@ -23,15 +31,13 @@ confirm() {
 }
 
 pause() {
-    read -rp "  Pressione Enter..." _
+    read -rp "  Enter para continuar..." _
 }
 
-has_docker() {
-    command -v docker &>/dev/null && docker info &>/dev/null 2>&1
-}
+has_docker() { [ "$MOCK_DOCKER" = "true" ]; }
 
 get_container_status() {
-    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$1" && echo "running" || echo "stopped"
+    echo "$MOCK_INSTALLED" | grep "^${1}|" | cut -d'|' -f4 2>/dev/null || echo "stopped"
 }
 
 parse_db() {
@@ -39,254 +45,108 @@ parse_db() {
 }
 
 db_exists() {
-    local dir
-    dir=$(parse_db "$1" 6)
-    [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]
+    echo "$MOCK_INSTALLED" | grep -q "^${1}|" 2>/dev/null
 }
 
 get_installed_list() {
-    local result=""
-    while IFS='|' read -r name display port repo container dir; do
-        [ -z "$name" ] && continue
-        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
-            local st
-            st=$(get_container_status "$container")
-            result="${result}${name}|${display}|${port}|${st}|${dir}\n"
-        fi
-    done <<< "$DATABASES"
-    printf '%b' "$result"
+    printf '%b' "$MOCK_INSTALLED"
 }
 
-# ============================================================
-# INSTALAR DOCKER
-# ============================================================
+# --- Mocks ---
 
-install_docker() {
+mock_install_docker() {
     echo ""
-    echo -e "${BD}${C}=== Instalar Docker ===${NC}"
-    echo ""
-    echo "  Será instalado:"
-    echo "    - Docker Engine + Compose v2"
-    echo "    - Repositório oficial Docker"
-    echo ""
-    confirm "Instalar?" || return 0
-
-    echo ""
-    info "Adicionando repositório Docker..."
-    apt-get update -y
-    apt-get install -y ca-certificates curl gnupg
-    install -m 0755 -d /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-    chmod a+r /etc/apt/keyrings/docker.gpg
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" > /etc/apt/sources.list.d/docker.list
-
-    info "Instalando Docker Engine + Compose..."
-    apt-get update -y
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-    systemctl enable docker
-    systemctl start docker
-
+    mock "Adicionando repositório Docker..."; sleep 0.3
+    mock "Instalando Docker Engine + Compose v2..."; sleep 0.5
+    MOCK_DOCKER=true
+    mock "Habilitando serviço Docker..."; sleep 0.2
     log "Docker instalado!"
 }
 
-# ============================================================
-# INSTALAR BANCO
-# ============================================================
-
-install_db() {
-    local db="$1"
-    local display default_port repo container dir="/opt/db-${db}" port
+mock_install_db() {
+    local db="$1" advanced="${2:-false}"
+    local display default_port dir="/opt/db-${db}" port
 
     display=$(parse_db "$db" 2)
     default_port=$(parse_db "$db" 3)
-    repo=$(parse_db "$db" 4)
-    container=$(parse_db "$db" 5)
     port="$default_port"
 
-    # Mostra resumo
-    echo ""
-    echo -e "  ${BD}${C}=== $display ===${NC}"
-    echo ""
-    echo "    Imagem:     $display"
-    echo "    Porta:      $default_port"
-    echo "    Pasta:      $dir"
-    echo "    Repo:       ${GITHUB_BASE}/${repo}"
-    echo ""
-
-    # Customização
-    read -rp "  Customizar? (pasta/porta) [y/N] " cust
-    if [[ "$cust" =~ ^[yY]$ ]]; then
+    if [ "$advanced" = "true" ]; then
         echo ""
+        echo -e "${BD}${C}--- $display ---${NC}"
         read -rp "  Pasta [$dir]: " x; [ -n "$x" ] && dir="$x"
         read -rp "  Porta [$default_port]: " x; [ -n "$x" ] && port="$x"
-        echo ""
-        echo -e "  ${BD}=== Resumo ===${NC}"
-        echo ""
-        printf "    %-16s → %-30s (porta %s)\n" "$display" "$dir" "$port"
-        echo ""
     fi
 
-    confirm "Confirmar instalar?" || return 0
+    echo ""
+    mock "git clone ... → $dir"; sleep 0.5
+    mock "docker compose up -d (porta $port)"; sleep 0.5
+    log "$display rodando na porta $port"
 
-    mkdir -p "$dir"
-
-    if [ -d "$dir/.git" ]; then
-        info "Repo existe, atualizando..."
-        (cd "$dir" && git pull --quiet) || true
-    else
-        info "Baixando $display..."
-        git clone --quiet "${GITHUB_BASE}/${repo}.git" "$dir"
-    fi
-
-    if [ -f "$dir/.env.example" ] && [ ! -f "$dir/.env" ]; then
-        cp "$dir/.env.example" "$dir/.env"
-        [ "$db" = "postgres" ] && [ "$port" != "$default_port" ] && sed -i "s/^PG_PORT=.*/PG_PORT=$port/" "$dir/.env"
-        [ "$db" = "dragonfly" ] && [ "$port" != "$default_port" ] && sed -i "s/^DF_PORT=.*/DF_PORT=$port/" "$dir/.env"
-    fi
-
-    chmod +x "$dir"/*.sh 2>/dev/null || true
-
-    info "Subindo $display..."
-    (cd "$dir" && docker compose up -d 2>&1)
-
-    sleep 3
-
-    local st
-    st=$(get_container_status "$container")
-    if [ "$st" = "running" ]; then
-        log "$display rodando na porta $port"
-    else
-        warn "$display pode não ter iniciado"
-    fi
-
-    [ -f "$dir/info.sh" ] && bash "$dir/info.sh"
+    echo ""
+    echo "  Host: localhost  Port: $port  DB: devdb"
 }
 
-# ============================================================
-# GERENCIAMENTO
-# ============================================================
-
-update_db() {
-    local dir display
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
-    [ -d "$dir/.git" ] || err "Repo não encontrado em $dir"
-    info "Atualizando $display..."
-    (cd "$dir" && git pull --quiet && docker compose restart 2>&1)
+mock_update_db() {
+    local display; display=$(parse_db "$1" 2)
+    mock "git pull + restart"; sleep 0.5
     log "$display atualizado!"
 }
 
-down_db() {
-    local dir display
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
-    (cd "$dir" && docker compose down --timeout 10 2>&1)
+mock_down_db() {
+    local display; display=$(parse_db "$1" 2)
+    mock "docker compose down"; sleep 0.5
     log "$display parado!"
 }
 
-status_db() {
-    local dir display port container
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
-    port=$(parse_db "$1" 3); container=$(parse_db "$1" 5)
+mock_status_db() {
+    local display port dir st
+    display=$(parse_db "$1" 2); port=$(parse_db "$1" 3); dir="/opt/db-${1}"
+    st=$(get_container_status "$1")
 
     echo ""
     echo -e "${BD}${C}=== $display ===${NC}"
     echo "  Pasta:  $dir"
     echo "  Porta:  $port"
 
-    local st
-    st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
         echo -e "  Status: ${G}running${NC}"
-        [ -f "$dir/info.sh" ] && echo "" && bash "$dir/info.sh"
+        echo "  Host: localhost  Port: $port"
     else
         echo -e "  Status: ${R}stopped${NC}"
     fi
 }
 
-remove_db() {
-    local dir display
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
+mock_remove_db() {
+    local display; display=$(parse_db "$1" 2)
     warn "PARAR e REMOVER $display"
     confirm "Certeza?" || return 0
-    (cd "$dir" && docker compose down -v --timeout 10 2>&1)
-    rm -rf "$dir"
+    mock "docker compose down -v + rm -rf"; sleep 0.5
     log "$display removido!"
 }
 
 # ============================================================
-# SUBMENU: INSTALAR
+# SELEÇÃO
 # ============================================================
 
-submenu_install() {
-    while true; do
-        clear
-        echo ""
-        echo -e "  ${BD}${C}← Instalar${NC}"
-        echo ""
-        echo "  O que você quer instalar?"
-        echo ""
-
-        local idx=1 docker_idx="" docker_opt=false
-
-        # Docker (se não tem)
-        if ! has_docker; then
-            echo "    [1] Docker Engine + Compose"
-            echo ""
-            echo "  Necessário pra rodar os bancos."
-            echo ""
-            docker_idx=1
-            docker_opt=true
-            idx=$((idx + 1))
-        fi
-
-        # Bancos
-        echo -e "  ${BD}Bancos:${NC}"
-        local db_names=()
-        while IFS='|' read -r name display port _; do
-            [ -z "$name" ] && continue
-            if db_exists "$name"; then
-                echo -e "    [$idx] $display (porta $port) ${G}já instalado${NC}"
-            else
-                echo "    [$idx] $display (porta $port)"
-            fi
-            db_names+=("$name")
-            idx=$((idx + 1))
-        done <<< "$DATABASES"
-
-        # Opções
-        echo ""
-        echo "    [0] ← Voltar ao menu principal"
-        echo ""
-
-        read -rp "  Escolha: " choice
-        [ "$choice" = "0" ] && return
-
-        # Docker
-        if [ "$docker_opt" = "true" ] && [ "$choice" = "$docker_idx" ]; then
-            install_docker
-            pause; continue
-        fi
-
-        # Ajusta índice se tem Docker
-        local adj=$choice
-        if [ "$docker_opt" = "true" ]; then
-            adj=$((choice - 1))
-        fi
-
-        # Banco individual
-        if [ "$adj" -ge 1 ] 2>/dev/null && [ "$adj" -le "${#db_names[@]}" ] 2>/dev/null; then
-            local selected="${db_names[$((adj - 1))]}"
-            install_db "$selected"
-            pause; continue
-        fi
-
-        warn "Opção inválida"
-    done
+resolve_db_list() {
+    local input="$1" dbs=""
+    if [ "$input" = "all" ]; then
+        while IFS='|' read -r name _; do [ -n "$name" ] && dbs="$dbs $name"; done <<< "$DATABASES"
+        echo "$dbs"; return 0
+    fi
+    IFS=',' read -ra choices <<< "$input"
+    local idx=1
+    while IFS='|' read -r name _; do
+        [ -z "$name" ] && continue
+        for ch in "${choices[@]}"; do
+            ch=$(echo "$ch" | tr -d ' ')
+            [ "$ch" = "$idx" ] && dbs="$dbs $name"
+        done
+        idx=$((idx + 1))
+    done <<< "$DATABASES"
+    echo "$dbs"
 }
-
-# ============================================================
-# SUBMENU: GERENCIAR
-# ============================================================
 
 select_installed_db() {
     local prompt="$1"
@@ -317,6 +177,117 @@ select_installed_db() {
     warn "Inválido" >&2; return 1
 }
 
+# ============================================================
+# SUBMENU: INSTALAR
+# ============================================================
+
+submenu_install() {
+    while true; do
+        clear
+        echo ""
+        echo -e "  ${BD}${C}← Instalar${NC}"
+        echo ""
+        echo "  O que você quer instalar?"
+        echo ""
+
+        local idx=1 docker_idx="" docker_opt=false
+
+        # Docker (se não tem)
+        if ! has_docker; then
+            echo "    [1] Docker Engine + Compose"
+            echo ""
+            echo "  Necessário pra rodar os bancos."
+            echo ""
+            local docker_idx=1
+            docker_opt=true
+            idx=$((idx + 1))
+        fi
+
+        # Bancos
+        echo -e "  ${BD}Bancos:${NC}"
+        local db_start=$idx
+        local db_names=()
+        while IFS='|' read -r name display port _; do
+            [ -z "$name" ] && continue
+            if db_exists "$name"; then
+                echo -e "    [$idx] $display (porta $port) ${G}já instalado${NC}"
+            else
+                echo "    [$idx] $display (porta $port)"
+            fi
+            db_names+=("$name")
+            idx=$((idx + 1))
+        done <<< "$DATABASES"
+
+        # Opções
+        echo ""
+        echo "    [0] ← Voltar ao menu principal"
+        echo ""
+
+        read -rp "  Escolha: " choice
+        [ "$choice" = "0" ] && return
+
+        # Docker
+        if [ "$docker_opt" = "true" ] && [ "$choice" = "$docker_idx" ]; then
+            echo ""
+            echo "  Será instalado:"
+            echo "    - Docker Engine + Compose v2"
+            echo "    - Repositório oficial Docker"
+            echo ""
+            confirm "Instalar?" && mock_install_docker
+            pause; continue
+        fi
+
+        # Ajusta índice se tem Docker
+        local adj=$choice
+        if [ "$docker_opt" = "true" ]; then
+            adj=$((choice - 1))
+        fi
+
+        # Banco individual
+        if [ "$adj" -ge 1 ] 2>/dev/null && [ "$adj" -le "${#db_names[@]}" ] 2>/dev/null; then
+            local selected="${db_names[$((adj - 1))]}"
+            local display default_port repo dir="/opt/db-${selected}" port
+
+            display=$(parse_db "$selected" 2)
+            default_port=$(parse_db "$selected" 3)
+            repo=$(parse_db "$selected" 4)
+            port="$default_port"
+
+            # Mostra resumo
+            echo ""
+            echo -e "  ${BD}${C}=== $display ===${NC}"
+            echo ""
+            echo "    Imagem:     ${display}"
+            echo "    Porta:      $default_port"
+            echo "    Pasta:      $dir"
+            echo "    Repo:       ${GITHUB_BASE:-https://github.com/Brazwed}/${repo}"
+            echo ""
+
+            # Pergunta customização
+            read -rp "  Customizar? (pasta/porta) [y/N] " cust
+            if [[ "$cust" =~ ^[yY]$ ]]; then
+                echo ""
+                read -rp "  Pasta [$dir]: " x; [ -n "$x" ] && dir="$x"
+                read -rp "  Porta [$default_port]: " x; [ -n "$x" ] && port="$x"
+                echo ""
+                echo -e "  ${BD}=== Resumo ===${NC}"
+                echo ""
+                printf "    %-16s → %-30s (porta %s)\n" "$display" "$dir" "$port"
+                echo ""
+            fi
+
+            confirm "Confirmar instalar?" && mock_install_db "$selected"
+            pause; continue
+        fi
+
+        warn "Opção inválida"
+    done
+}
+
+# ============================================================
+# SUBMENU: GERENCIAR
+# ============================================================
+
 submenu_manage() {
     while true; do
         clear
@@ -324,6 +295,7 @@ submenu_manage() {
         echo -e "  ${BD}${C}← Gerenciar bancos${NC}"
         echo ""
 
+        # Lista bancos instalados
         local installed_raw
         installed_raw=$(get_installed_list)
 
@@ -335,15 +307,16 @@ submenu_manage() {
 
         echo -e "  ${BD}Bancos instalados:${NC}"
         echo ""
-        local names=()
+        local idx=1 names=()
         while IFS='|' read -r name display port status dir; do
             [ -z "$name" ] && continue
             if [ "$status" = "running" ]; then
-                echo -e "    ${G}●${NC} $display (porta $port) rodando"
+                echo -e "    [$idx] ${G}●${NC} $display (porta $port) rodando"
             else
-                echo -e "    ${R}●${NC} $display (porta $port) parado"
+                echo -e "    [$idx] ${R}●${NC} $display (porta $port) parado"
             fi
             names+=("$name")
+            idx=$((idx + 1))
         done <<< "$installed_raw"
 
         echo ""
@@ -364,14 +337,14 @@ submenu_manage() {
         local db_name
         case "$action" in
             u) db_name=$(select_installed_db "Qual banco atualizar?") || continue
-               update_db "$db_name"; pause ;;
+               mock_update_db "$db_name"; pause ;;
             d) db_name=$(select_installed_db "Qual banco parar?") || continue
-               down_db "$db_name"; pause ;;
+               mock_down_db "$db_name"; pause ;;
             s)
-                for name in "${names[@]}"; do status_db "$name"; done
+                for name in "${names[@]}"; do mock_status_db "$name"; done
                 pause ;;
             x) db_name=$(select_installed_db "Qual banco remover?") || continue
-               remove_db "$db_name"; pause ;;
+               mock_remove_db "$db_name"; pause ;;
             *) warn "Opção inválida" ;;
         esac
     done
@@ -394,7 +367,7 @@ show_main_menu() {
     echo -e "  ${BD}${C}╚═══════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Sistema
+    # --- Sistema ---
     echo -e "  ${BD}Sistema${NC}"
     if has_docker; then
         echo -e "    Docker:     ${G}● instalado${NC}"
@@ -403,13 +376,14 @@ show_main_menu() {
     fi
     echo ""
 
-    # Bancos
+    # --- Bancos ---
     echo -e "  ${BD}Bancos${NC}"
     echo ""
 
     local any=false
     while IFS='|' read -r name display port repo container dir; do
         [ -z "$name" ] && continue
+
         local st="" color="${Y}" tag="não instalado"
         if echo "$installed_raw" | grep -q "^${name}|"; then
             st=$(echo "$installed_raw" | grep "^${name}|" | cut -d'|' -f4)
@@ -420,7 +394,9 @@ show_main_menu() {
             fi
             any=true
         fi
+
         echo -e "    ${C}${display}${NC}  porta ${port}  ${color}${tag}${NC}"
+
         if [ "$st" = "running" ]; then
             if [ "$name" = "postgres" ]; then
                 echo "      → psql -h localhost -p $port -U postgres -d devdb"
@@ -432,7 +408,7 @@ show_main_menu() {
 
     echo ""
 
-    # Menu
+    # --- Menu ---
     echo -e "  ${BD}Menu${NC}"
     echo ""
     echo "    [1] Instalar        preparar ambiente ou banco(s)"
@@ -444,64 +420,7 @@ show_main_menu() {
 }
 
 # ============================================================
-# MODO DIRETO (ARGS)
-# ============================================================
-
-parse_args() {
-    local action="${1:-}"
-    shift 2>/dev/null || true
-    local args="$*"
-
-    case "$action" in
-        add)
-            if [ -z "$args" ]; then
-                err "Uso: $0 add <postgres|dragonfly>"
-            fi
-            for db in $args; do
-                install_db "$db"
-            done
-            ;;
-        update)
-            [ -z "$args" ] && err "Uso: $0 update <postgres|dragonfly>"
-            for db in $args; do update_db "$db"; done
-            ;;
-        down)
-            [ -z "$args" ] && err "Uso: $0 down <postgres|dragonfly>"
-            for db in $args; do down_db "$db"; done
-            ;;
-        status)
-            if [ -z "$args" ]; then
-                while IFS='|' read -r name _; do
-                    [ -n "$name" ] && db_exists "$name" && status_db "$name"
-                done <<< "$DATABASES"
-            else
-                for db in $args; do status_db "$db"; done
-            fi
-            ;;
-        remove)
-            [ -z "$args" ] && err "Uso: $0 remove <postgres|dragonfly>"
-            for db in $args; do remove_db "$db"; done
-            ;;
-        docker)
-            install_docker
-            ;;
-        *)
-            err "Uso:
-  $0                        menu interativo
-  $0 add <db>               instalar banco
-  $0 update <db>            atualizar banco
-  $0 down <db>              parar banco
-  $0 status [db]            ver status
-  $0 remove <db>            remover banco
-  $0 docker                 instalar Docker
-
-Bancos: postgres, dragonfly"
-            ;;
-    esac
-}
-
-# ============================================================
-# LOOP INTERATIVO
+# LOOP
 # ============================================================
 
 interactive_menu() {
@@ -531,15 +450,12 @@ interactive_menu() {
 # MAIN
 # ============================================================
 
-main() {
-    [ "$(id -u)" -ne 0 ] && err "Execute como root: sudo $0"
+echo ""
+echo -e "${BD}${Y}=== TEST MODE ===${NC}"
+echo -e "  Docker:    $MOCK_DOCKER"
+echo -e "  Installed: ${MOCK_INSTALLED:-nenhum}"
+echo ""
+read -rp "Iniciar? [Y/n] " go
+[[ "$go" =~ ^[nN]$ ]] && exit 0
 
-    if [ -n "${1:-}" ]; then
-        parse_args "$@"
-        exit 0
-    fi
-
-    interactive_menu
-}
-
-main "$@"
+interactive_menu
