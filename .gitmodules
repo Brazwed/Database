@@ -1,0 +1,6 @@
+[submodule "db-postgres"]
+	path = db-postgres
+	url = https://github.com/Brazwed/db-postgres.git
+[submodule "db-dragonfly"]
+	path = db-dragonfly
+	url = https://github.com/Brazwed/db-dragonfly.git
