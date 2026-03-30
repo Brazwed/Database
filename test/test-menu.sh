@@ -88,8 +88,16 @@ mock_install_db() {
 }
 
 mock_update_db() {
-    local display; display=$(parse_db "$1" 2)
-    mock "git pull + restart"; sleep 0.5
+    local display container st
+    display=$(parse_db "$1" 2); container=$(parse_db "$1" 5)
+    st=$(get_container_status "$container")
+
+    if [ "$st" = "running" ]; then
+        mock "git pull + docker compose restart"; sleep 0.5
+    else
+        mock "git pull + docker compose up -d"; sleep 0.5
+    fi
+
     log "$display atualizado!"
 }
 

@@ -168,11 +168,20 @@ install_db() {
 # ============================================================
 
 update_db() {
-    local dir display
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
+    local dir display container st
+    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2); container=$(parse_db "$1" 5)
     [ -d "$dir/.git" ] || err "Repo não encontrado em $dir"
+
     info "Atualizando $display..."
-    (cd "$dir" && git pull --quiet && docker compose restart 2>&1)
+    (cd "$dir" && git pull --quiet)
+
+    st=$(get_container_status "$container")
+    if [ "$st" = "running" ]; then
+        (cd "$dir" && docker compose restart 2>&1)
+    else
+        (cd "$dir" && docker compose up -d 2>&1)
+    fi
+
     log "$display atualizado!"
 }
 
