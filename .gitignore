@@ -3,6 +3,7 @@
 
 # Database data directories
 **/data/
+/test/
 
 # OS files
 .DS_Store

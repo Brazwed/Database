@@ -1,86 +1,49 @@
 # Database Toolkit
 
-Docker containers pré-configurados para bancos de dados. Sem conflitos, sem comandos errados, prontos pra usar.
+Docker containers pré-configurados para bancos de dados. Um único script pra tudo.
 
 ## Bancos disponíveis
 
-| Banco | Repo | Status | Porta |
-|-------|------|--------|-------|
-| PostgreSQL 16 | [db-postgres](https://github.com/brazwed/db-postgres) | ✅ Pronto | 5432 |
-| DragonflyDB | [db-dragonfly](https://github.com/brazwed/db-dragonfly) | ✅ Pronto | 6379 |
+| Banco | Porta | Repo |
+|-------|-------|------|
+| PostgreSQL 16 | 5432 | [db-postgres](https://github.com/Brazwed/db-postgres) |
+| DragonflyDB | 6379 | [db-dragonfly](https://github.com/Brazwed/db-dragonfly) |
 
-## Como usar
-
-### Standalone (só 1 banco)
+## Instalação rápida
 
 ```bash
-git clone https://github.com/brazwed/db-postgres.git
-cd db-postgres
-./start.sh up
-./info.sh
-```
-
-### Via repo principal (todos os bancos)
-
-```bash
-git clone https://github.com/brazwed/Database.git
-cd Database
-make db-postgres/up
-make db-dragonfly/up
-```
-
-### VPS (provisionamento completo)
-
-```bash
-# Na VPS Ubuntu limpa:
-git clone https://github.com/brazwed/Database.git
+git clone --recurse-submodules https://github.com/Brazwed/Database.git
 cd Database
 sudo ./setup.sh
-# Escolhe [N]ova VPS → seleciona banco → tudo pronto
 ```
 
-## Comandos Makefile
+## Comandos
+
+### Menu interativo
 
 ```bash
-# Por banco
-make db-postgres/up       # iniciar
-make db-postgres/down     # parar
-make db-postgres/logs     # logs
-make db-postgres/psql     # shell psql
-make db-postgres/info     # dados de conexão
-make db-postgres/clean    # remover dados
-
-make db-dragonfly/up
-make db-dragonfly/info
-
-# Global
-make up        # todos
-make down      # todos
-make status    # todos
-make info      # todos
-make clean     # todos (DATA LOSS)
+sudo ./setup.sh
 ```
 
-## Estrutura
+### Args diretos
 
-```
-Database/                        ← Este repo (ponte)
-├── setup.sh                     # Provisionamento VPS interativo
-├── Makefile                     # Atalhos para gerenciar bancos
-│
-├── db-postgres/                 ← Repo: db-postgres
-│   ├── docker-compose.yml
-│   ├── .env.example
-│   ├── start.sh                 # up|down|restart|logs|status|shell|psql|clean
-│   ├── info.sh                  # Mostra dados de conexão
-│   └── README.md
-│
-└── db-dragonfly/                ← Repo: db-dragonfly
-    ├── docker-compose.yml
-    ├── .env.example
-    ├── start.sh                 # up|down|restart|logs|status|shell|clean
-    ├── info.sh                  # Mostra dados de conexão
-    └── README.md
+```bash
+# Instalar
+sudo ./setup.sh install docker              # instalar Docker
+sudo ./setup.sh install postgres            # instalar PostgreSQL
+sudo ./setup.sh install postgres dragonfly  # instalar vários
+
+# Gerenciar
+sudo ./setup.sh up postgres                 # iniciar
+sudo ./setup.sh down postgres               # parar
+sudo ./setup.sh restart postgres            # reiniciar
+sudo ./setup.sh update postgres             # git pull + up/restart
+sudo ./setup.sh status                      # status de todos
+sudo ./setup.sh status postgres             # status de 1
+sudo ./setup.sh logs postgres               # logs em tempo real
+sudo ./setup.sh shell postgres              # shell no container
+sudo ./setup.sh psql                        # atalho pro psql
+sudo ./setup.sh remove postgres             # remover banco
 ```
 
 ## Conexão padrão
@@ -107,12 +70,30 @@ Senha:    dragonfly_dev_2026
 redis-cli -h localhost -p 6379 -a dragonfly_dev_2026
 ```
 
+## Estrutura
+
+```
+Database/
+├── setup.sh               ← ÚNICO ponto de entrada
+├── test/test-menu.sh      ← Mock pra testar menu
+├── README.md
+│
+├── db-postgres/           ← Repo: db-postgres
+│   ├── docker-compose.yml
+│   ├── .env.example
+│   └── README.md
+│
+└── db-dragonfly/          ← Repo: db-dragonfly
+    ├── docker-compose.yml
+    ├── .env.example
+    └── README.md
+```
+
 ## Adicionar novo banco
 
 1. Criar repo no GitHub (ex: `db-mongodb`)
-2. Criar pasta local: `db-mongodb/`
-3. Criar: `docker-compose.yml`, `.env.example`, `start.sh`, `info.sh`, `README.md`
-4. Adicionar `db-mongodb` na variável `DATABASES` do Makefile
-5. Adicionar entrada no `DATABASES` do `setup.sh`
+2. Criar pasta: `db-mongodb/`
+3. Criar: `docker-compose.yml`, `.env.example`, `README.md`
+4. Adicionar na variável `DATABASES` do `setup.sh`
 
 Pronto — zero conflito com os outros bancos.

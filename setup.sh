@@ -2,6 +2,7 @@
 
 # ============================================================
 # Database Toolkit - Setup
+# Único ponto de entrada pra tudo
 # ============================================================
 
 GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
@@ -57,6 +58,13 @@ get_installed_list() {
     printf '%b' "$result"
 }
 
+get_compose_file() {
+    local db="$1"
+    local dir
+    dir=$(parse_db "$db" 6)
+    echo "$dir/docker-compose.yml"
+}
+
 # ============================================================
 # INSTALAR DOCKER
 # ============================================================
@@ -69,6 +77,12 @@ install_docker() {
     echo "    - Docker Engine + Compose v2"
     echo "    - Repositório oficial Docker"
     echo ""
+
+    if has_docker; then
+        info "Docker já instalado"
+        return 0
+    fi
+
     confirm "Instalar?" || return 0
 
     echo ""
@@ -83,9 +97,7 @@ install_docker() {
     info "Instalando Docker Engine + Compose..."
     apt-get update -y
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
-    systemctl enable docker
-    systemctl start docker
+    systemctl enable docker && systemctl start docker
 
     log "Docker instalado!"
 }
@@ -104,7 +116,6 @@ install_db() {
     container=$(parse_db "$db" 5)
     port="$default_port"
 
-    # Mostra resumo
     echo ""
     echo -e "  ${BD}${C}=== $display ===${NC}"
     echo ""
@@ -114,7 +125,6 @@ install_db() {
     echo "    Repo:       ${GITHUB_BASE}/${repo}"
     echo ""
 
-    # Customização
     read -rp "  Customizar? (pasta/porta) [y/N] " cust
     if [[ "$cust" =~ ^[yY]$ ]]; then
         echo ""
@@ -157,20 +167,68 @@ install_db() {
     if [ "$st" = "running" ]; then
         log "$display rodando na porta $port"
     else
-        warn "$display pode não ter iniciado"
+        warn "$display pode não ter iniciado. Verifique: $0 logs $db"
     fi
 
-    [ -f "$dir/info.sh" ] && bash "$dir/info.sh"
+    show_info "$db"
 }
 
 # ============================================================
-# GERENCIAMENTO
+# BANCO: UP / DOWN / RESTART / UPDATE
 # ============================================================
 
+start_db() {
+    local db="$1"
+    local dir display container
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
+
+    if ! db_exists "$db"; then
+        warn "$display não instalado. Instale primeiro: $0 install $db"
+        return 1
+    fi
+
+    info "Iniciando $display..."
+    (cd "$dir" && docker compose up -d 2>&1)
+    sleep 2
+
+    local st
+    st=$(get_container_status "$container")
+    if [ "$st" = "running" ]; then
+        log "$display rodando"
+    else
+        warn "$display pode não ter iniciado"
+    fi
+}
+
+stop_db() {
+    local db="$1"
+    local dir display
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
+
+    if ! db_exists "$db"; then
+        warn "$display não instalado"
+        return 1
+    fi
+
+    info "Parando $display..."
+    (cd "$dir" && docker compose down --timeout 10 2>&1)
+    log "$display parado!"
+}
+
+restart_db() {
+    stop_db "$1"
+    start_db "$1"
+}
+
 update_db() {
+    local db="$1"
     local dir display container st
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2); container=$(parse_db "$1" 5)
-    [ -d "$dir/.git" ] || err "Repo não encontrado em $dir"
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
+
+    if ! db_exists "$db"; then
+        warn "$display não instalado"
+        return 1
+    fi
 
     info "Atualizando $display..."
     (cd "$dir" && git pull --quiet)
@@ -185,17 +243,15 @@ update_db() {
     log "$display atualizado!"
 }
 
-down_db() {
-    local dir display
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
-    (cd "$dir" && docker compose down --timeout 10 2>&1)
-    log "$display parado!"
-}
+# ============================================================
+# BANCO: STATUS / INFO / LOGS / SHELL
+# ============================================================
 
 status_db() {
+    local db="$1"
     local dir display port container
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
-    port=$(parse_db "$1" 3); container=$(parse_db "$1" 5)
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
+    port=$(parse_db "$db" 3); container=$(parse_db "$db" 5)
 
     echo ""
     echo -e "${BD}${C}=== $display ===${NC}"
@@ -206,17 +262,98 @@ status_db() {
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
         echo -e "  Status: ${G}running${NC}"
-        [ -f "$dir/info.sh" ] && echo "" && bash "$dir/info.sh"
+        show_info "$db"
     else
         echo -e "  Status: ${R}stopped${NC}"
     fi
 }
 
-remove_db() {
+show_info() {
+    local db="$1"
+    local dir display port
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); port=$(parse_db "$db" 3)
+
+    echo ""
+    if [ "$db" = "postgres" ]; then
+        local user="postgres" pass="postgres_dev_2026" dbname="devdb"
+        [ -f "$dir/.env" ] && {
+            user=$(grep "^PG_USER=" "$dir/.env" | cut -d= -f2)
+            pass=$(grep "^PG_PASS=" "$dir/.env" | cut -d= -f2)
+            dbname=$(grep "^PG_DB=" "$dir/.env" | cut -d= -f2)
+        }
+        echo "  Host:     localhost"
+        echo "  Port:     $port"
+        echo "  Database: $dbname"
+        echo "  User:     $user"
+        echo "  Pass:     $pass"
+        echo ""
+        echo "  Connect:"
+        echo "    psql -h localhost -p $port -U $user -d $dbname"
+    elif [ "$db" = "dragonfly" ]; then
+        local pass="dragonfly_dev_2026"
+        [ -f "$dir/.env" ] && pass=$(grep "^DF_PASS=" "$dir/.env" | cut -d= -f2)
+        echo "  Host: localhost"
+        echo "  Port: $port"
+        echo "  Pass: $pass"
+        echo ""
+        echo "  Connect:"
+        echo "    redis-cli -h localhost -p $port -a $pass"
+    fi
+}
+
+logs_db() {
+    local db="$1"
     local dir display
-    dir=$(parse_db "$1" 6); display=$(parse_db "$1" 2)
-    warn "PARAR e REMOVER $display"
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
+
+    if ! db_exists "$db"; then
+        warn "$display não instalado"
+        return 1
+    fi
+
+    echo ""
+    info "Logs de $display (Ctrl+C pra sair)..."
+    echo ""
+    docker compose -f "$dir/docker-compose.yml" logs -f
+}
+
+shell_db() {
+    local db="$1"
+    local dir display container
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
+
+    if ! db_exists "$db"; then
+        warn "$display não instalado"
+        return 1
+    fi
+
+    local st
+    st=$(get_container_status "$container")
+    if [ "$st" != "running" ]; then
+        warn "$display não está rodando. Use: $0 up $db"
+        return 1
+    fi
+
+    docker compose -f "$dir/docker-compose.yml" exec -it "$container" sh
+}
+
+# ============================================================
+# REMOVER BANCO
+# ============================================================
+
+remove_db() {
+    local db="$1"
+    local dir display container
+    dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
+
+    if ! db_exists "$db"; then
+        warn "$display não instalado"
+        return 1
+    fi
+
+    warn "PARAR e REMOVER $display completamente"
     confirm "Certeza?" || return 0
+
     (cd "$dir" && docker compose down -v --timeout 10 2>&1)
     rm -rf "$dir"
     log "$display removido!"
@@ -237,18 +374,14 @@ submenu_install() {
 
         local idx=1 docker_idx="" docker_opt=false
 
-        # Docker (se não tem)
         if ! has_docker; then
             echo "    [1] Docker Engine + Compose"
             echo ""
             echo "  Necessário pra rodar os bancos."
             echo ""
-            docker_idx=1
-            docker_opt=true
-            idx=$((idx + 1))
+            docker_idx=1; docker_opt=true; idx=$((idx + 1))
         fi
 
-        # Bancos
         echo -e "  ${BD}Bancos:${NC}"
         local db_names=()
         while IFS='|' read -r name display port _; do
@@ -258,11 +391,9 @@ submenu_install() {
             else
                 echo "    [$idx] $display (porta $port)"
             fi
-            db_names+=("$name")
-            idx=$((idx + 1))
+            db_names+=("$name"); idx=$((idx + 1))
         done <<< "$DATABASES"
 
-        # Opções
         echo ""
         echo "    [0] ← Voltar ao menu principal"
         echo ""
@@ -270,23 +401,15 @@ submenu_install() {
         read -rp "  Escolha: " choice
         [ "$choice" = "0" ] && return
 
-        # Docker
         if [ "$docker_opt" = "true" ] && [ "$choice" = "$docker_idx" ]; then
-            install_docker
-            pause; continue
+            install_docker; pause; continue
         fi
 
-        # Ajusta índice se tem Docker
         local adj=$choice
-        if [ "$docker_opt" = "true" ]; then
-            adj=$((choice - 1))
-        fi
+        [ "$docker_opt" = "true" ] && adj=$((choice - 1))
 
-        # Banco individual
         if [ "$adj" -ge 1 ] 2>/dev/null && [ "$adj" -le "${#db_names[@]}" ] 2>/dev/null; then
-            local selected="${db_names[$((adj - 1))]}"
-            install_db "$selected"
-            pause; continue
+            install_db "${db_names[$((adj - 1))]}"; pause; continue
         fi
 
         warn "Opção inválida"
@@ -311,8 +434,7 @@ select_installed_db() {
     while IFS='|' read -r name display _; do
         [ -z "$name" ] && continue
         echo "  [$idx] $display" >&2
-        names+=("$name")
-        idx=$((idx + 1))
+        names+=("$name"); idx=$((idx + 1))
     done <<< "$installed_raw"
     echo "  [0] Voltar" >&2
     echo "" >&2
@@ -338,8 +460,7 @@ submenu_manage() {
 
         if [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
             echo "  Nenhum banco instalado."
-            echo ""
-            pause; return
+            echo ""; pause; return
         fi
 
         echo -e "  ${BD}Bancos instalados:${NC}"
@@ -358,16 +479,16 @@ submenu_manage() {
         echo ""
         echo -e "  ${BD}O que fazer?${NC}"
         echo ""
-        echo "    [U] Atualizar (git pull + restart)"
+        echo "    [U] Atualizar (git pull + restart/up)"
         echo "    [D] Parar (docker compose down)"
         echo "    [S] Status (detalhes + conexão)"
+        echo "    [L] Logs (acompanhar em tempo real)"
         echo "    [X] Remover (deletar tudo)"
         echo "    [0] ← Voltar ao menu principal"
         echo ""
 
         read -rp "  Escolha: " action
         [ "$action" = "0" ] && return
-
         action=$(echo "$action" | tr '[:upper:]' '[:lower:]')
 
         local db_name
@@ -375,10 +496,12 @@ submenu_manage() {
             u) db_name=$(select_installed_db "Qual banco atualizar?") || continue
                update_db "$db_name"; pause ;;
             d) db_name=$(select_installed_db "Qual banco parar?") || continue
-               down_db "$db_name"; pause ;;
+               stop_db "$db_name"; pause ;;
             s)
                 for name in "${names[@]}"; do status_db "$name"; done
                 pause ;;
+            l) db_name=$(select_installed_db "Qual banco ver logs?") || continue
+               logs_db "$db_name" ;;
             x) db_name=$(select_installed_db "Qual banco remover?") || continue
                remove_db "$db_name"; pause ;;
             *) warn "Opção inválida" ;;
@@ -403,7 +526,6 @@ show_main_menu() {
     echo -e "  ${BD}${C}╚═══════════════════════════════════════════╝${NC}"
     echo ""
 
-    # Sistema
     echo -e "  ${BD}Sistema${NC}"
     if has_docker; then
         echo -e "    Docker:     ${G}● instalado${NC}"
@@ -412,7 +534,6 @@ show_main_menu() {
     fi
     echo ""
 
-    # Bancos
     echo -e "  ${BD}Bancos${NC}"
     echo ""
 
@@ -440,8 +561,6 @@ show_main_menu() {
     done <<< "$DATABASES"
 
     echo ""
-
-    # Menu
     echo -e "  ${BD}Menu${NC}"
     echo ""
     echo "    [1] Instalar        preparar ambiente ou banco(s)"
@@ -462,21 +581,33 @@ parse_args() {
     local args="$*"
 
     case "$action" in
-        add)
+        install)
             if [ -z "$args" ]; then
-                err "Uso: $0 add <postgres|dragonfly>"
+                err "Uso: $0 install <docker|postgres|dragonfly>"
             fi
-            for db in $args; do
-                install_db "$db"
+            for arg in $args; do
+                case "$arg" in
+                    docker) install_docker ;;
+                    postgres|dragonfly) install_db "$arg" ;;
+                    *) warn "Banco desconhecido: $arg" ;;
+                esac
             done
+            ;;
+        up)
+            [ -z "$args" ] && err "Uso: $0 up <postgres|dragonfly>"
+            for db in $args; do start_db "$db"; done
+            ;;
+        down)
+            [ -z "$args" ] && err "Uso: $0 down <postgres|dragonfly>"
+            for db in $args; do stop_db "$db"; done
+            ;;
+        restart)
+            [ -z "$args" ] && err "Uso: $0 restart <postgres|dragonfly>"
+            for db in $args; do restart_db "$db"; done
             ;;
         update)
             [ -z "$args" ] && err "Uso: $0 update <postgres|dragonfly>"
             for db in $args; do update_db "$db"; done
-            ;;
-        down)
-            [ -z "$args" ] && err "Uso: $0 down <postgres|dragonfly>"
-            for db in $args; do down_db "$db"; done
             ;;
         status)
             if [ -z "$args" ]; then
@@ -487,22 +618,35 @@ parse_args() {
                 for db in $args; do status_db "$db"; done
             fi
             ;;
+        logs)
+            [ -z "$args" ] && err "Uso: $0 logs <postgres|dragonfly>"
+            logs_db "$args"
+            ;;
+        shell)
+            [ -z "$args" ] && err "Uso: $0 shell <postgres|dragonfly>"
+            shell_db "$args"
+            ;;
+        psql)
+            shell_db "postgres"
+            ;;
         remove)
             [ -z "$args" ] && err "Uso: $0 remove <postgres|dragonfly>"
             for db in $args; do remove_db "$db"; done
             ;;
-        docker)
-            install_docker
-            ;;
         *)
             err "Uso:
-  $0                        menu interativo
-  $0 add <db>               instalar banco
-  $0 update <db>            atualizar banco
-  $0 down <db>              parar banco
-  $0 status [db]            ver status
-  $0 remove <db>            remover banco
-  $0 docker                 instalar Docker
+  $0                           menu interativo
+  $0 install <db>              instalar banco
+  $0 install docker            instalar Docker
+  $0 up <db>                   iniciar banco
+  $0 down <db>                 parar banco
+  $0 restart <db>              reiniciar banco
+  $0 update <db>               atualizar banco (git pull + up)
+  $0 status [db]               ver status
+  $0 logs <db>                 acompanhar logs
+  $0 shell <db>                shell no container
+  $0 psql                      shell psql (atalho)
+  $0 remove <db>               remover banco
 
 Bancos: postgres, dragonfly"
             ;;
