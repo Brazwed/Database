@@ -6,9 +6,13 @@
 # ============================================================
 
 GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
+BACKUP_DIR="${HOME}/.db-toolkit/backups"
 
 DATABASES="postgres|PostgreSQL 16|5432|db-postgres|postgres|/opt/db-postgres
 dragonfly|DragonflyDB|6379|db-dragonfly|dragonfly|/opt/db-dragonfly"
+
+FW_TYPE="none"
+FW_ACTIVE=false
 
 R='\033[0;31m'; G='\033[0;32m'; Y='\033[1;33m'; B='\033[0;34m'
 C='\033[0;36m'; BD='\033[1m'; NC='\033[0m'
@@ -66,6 +70,388 @@ get_compose_file() {
 }
 
 # ============================================================
+# DETECÇÃO
+# ============================================================
+
+detect_firewall() {
+    FW_TYPE="none"
+    FW_ACTIVE=false
+
+    if command -v ufw &>/dev/null; then
+        if ufw status 2>/dev/null | head -1 | grep -q "active"; then
+            FW_TYPE="ufw"
+            FW_ACTIVE=true
+            echo -e "    Firewall:       ${G}UFW ativo${NC}"
+            return
+        fi
+    fi
+
+    if command -v iptables &>/dev/null; then
+        local ipt_rules
+        ipt_rules=$(iptables -L INPUT -n 2>/dev/null | grep -c "^[A-Z]" || echo "0")
+        if [ "$ipt_rules" -gt 2 ]; then
+            FW_TYPE="iptables"
+            FW_ACTIVE=true
+            echo -e "    Firewall:       ${G}iptables${NC} (${ipt_rules} regras)"
+            return
+        fi
+    fi
+
+    echo -e "    Firewall:       ${Y}nenhum detectado${NC}"
+}
+
+ask_firewall_choice() {
+    echo ""
+
+    if [ "$FW_ACTIVE" = "false" ]; then
+        echo "  Nenhum firewall ativo."
+        echo ""
+        echo "    [1] Instalar UFW"
+        echo "    [2] Usar iptables"
+        echo "    [3] Não alterar firewall"
+        echo ""
+        read -rp "  Escolha: " fw_ch
+
+        case "$fw_ch" in
+            1)
+                apt-get install -y ufw >/dev/null 2>&1
+                ufw default deny incoming >/dev/null 2>&1
+                ufw default allow outgoing >/dev/null 2>&1
+                ufw allow 22/tcp comment "SSH" >/dev/null 2>&1
+                ufw --force enable >/dev/null 2>&1
+                FW_TYPE="ufw"; FW_ACTIVE=true
+                log "UFW instalado e ativado"
+                ;;
+            2)
+                FW_TYPE="iptables"; FW_ACTIVE=true
+                iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null
+                iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null
+                log "iptables configurado"
+                ;;
+            *)
+                info "Firewall não alterado"
+                return 1
+                ;;
+        esac
+    fi
+
+    read -rp "  Liberar porta no firewall? [Y/n] " fw_go
+    [[ "$fw_go" =~ ^[nN]$ ]] && return 1
+
+    if [ "$FW_ACTIVE" = "true" ] && command -v ufw &>/dev/null && command -v iptables &>/dev/null; then
+        echo ""
+        echo "    [1] ${FW_TYPE}"
+        local alt="iptables"; [ "$FW_TYPE" = "iptables" ] && alt="ufw"
+        echo "    [2] ${alt}"
+        echo ""
+        read -rp "  Qual usar? [1/2]: " fw_pick
+        if [ "$fw_pick" = "2" ]; then
+            FW_TYPE="$alt"
+        fi
+    fi
+
+    return 0
+}
+
+open_port() {
+    local port="$1" comment="${2:-Database}"
+
+    if [ "$FW_TYPE" = "ufw" ]; then
+        ufw allow "$port/tcp" comment "$comment" >/dev/null 2>&1
+    elif [ "$FW_TYPE" = "iptables" ]; then
+        iptables -A INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null
+    fi
+}
+
+detect_vps_state() {
+    echo ""
+    echo -e "  ${BD}${C}=== Detecção VPS ===${NC}"
+    echo ""
+
+    local conflicts=false
+
+    # Docker
+    if has_docker; then
+        local dver
+        dver=$(docker --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1)
+        echo -e "    Docker:         ${G}● instalado${NC} (v${dver})"
+    else
+        echo -e "    Docker:         ${R}● não instalado${NC}"
+    fi
+
+    # Containers
+    if has_docker; then
+        local containers
+        containers=$(docker ps -a --format '{{.Names}}' 2>/dev/null | tr '\n' ', ' | sed 's/,$//')
+        echo "    Containers:     ${containers:-nenhum}"
+    fi
+
+    # Portas
+    for db_line in $DATABASES; do
+        local name port
+        name=$(echo "$db_line" | cut -d'|' -f1)
+        port=$(echo "$db_line" | cut -d'|' -f3)
+
+        local pid
+        pid=$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -oP 'pid=\K[0-9]+' | head -1)
+
+        if [ -n "$pid" ]; then
+            local pname
+            pname=$(ps -p "$pid" -o comm= 2>/dev/null || echo "?")
+            echo -e "    Porta ${port}:     ${Y}● USADA${NC} (${pname}, PID ${pid})"
+            conflicts=true
+        else
+            echo -e "    Porta ${port}:     ${G}● livre${NC}"
+        fi
+    done
+
+    # Diretórios
+    while IFS='|' read -r name display _ _ _ dir; do
+        [ -z "$name" ] && continue
+        if [ -d "$dir" ]; then
+            if [ -f "$dir/docker-compose.yml" ]; then
+                echo -e "    ${dir}:  ${Y}● EXISTE${NC} (instalado)"
+            else
+                echo -e "    ${dir}:  ${Y}● EXISTE${NC} (vazio)"
+                conflicts=true
+            fi
+        else
+            echo -e "    ${dir}:  ${G}● livre${NC}"
+        fi
+    done <<< "$DATABASES"
+
+    # Serviços nativos
+    if systemctl is-active postgresql &>/dev/null 2>&1; then
+        echo -e "    PostgreSQL nativo: ${Y}● rodando${NC} (pode conflitar)"
+        conflicts=true
+    fi
+    if systemctl is-active redis &>/dev/null 2>&1; then
+        echo -e "    Redis nativo:      ${Y}● rodando${NC} (pode conflitar)"
+        conflicts=true
+    fi
+
+    # Firewall
+    detect_firewall
+
+    echo ""
+
+    if [ "$conflicts" = "true" ]; then
+        return 1
+    fi
+    return 0
+}
+
+# ============================================================
+# BACKUP
+# ============================================================
+
+create_backup() {
+    local target="$1"
+    local reason="${2:-manual}"
+    local timestamp
+    timestamp=$(date +%Y-%m-%d_%H-%M-%S)
+
+    mkdir -p "$BACKUP_DIR"
+
+    if [ "$target" = "vps" ]; then
+        local bk_dir="${BACKUP_DIR}/vps/${timestamp}"
+        mkdir -p "$bk_dir"
+
+        info "Backup do estado da VPS..."
+
+        if [ "$FW_TYPE" = "ufw" ]; then
+            ufw status numbered > "$bk_dir/ufw.rules" 2>/dev/null || true
+        fi
+        if command -v iptables &>/dev/null; then
+            iptables-save > "$bk_dir/iptables.rules" 2>/dev/null || true
+        fi
+        if has_docker; then
+            docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' > "$bk_dir/docker-containers.txt" 2>/dev/null || true
+            docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}' > "$bk_dir/docker-images.txt" 2>/dev/null || true
+        fi
+
+        cat > "$bk_dir/meta.json" << EOF
+{
+  "timestamp": "${timestamp}",
+  "target": "vps",
+  "reason": "${reason}",
+  "hostname": "$(hostname)",
+  "date": "$(date -Iseconds)"
+}
+EOF
+
+        ln -sfn "$bk_dir" "${BACKUP_DIR}/vps/latest"
+        log "Backup VPS salvo: ${timestamp}"
+
+    else
+        local dir display
+        dir=$(parse_db "$target" 6)
+        display=$(parse_db "$target" 2)
+
+        local bk_dir="${BACKUP_DIR}/${target}/${timestamp}"
+        mkdir -p "$bk_dir"
+
+        info "Backup de $display..."
+
+        [ -f "$dir/.env" ] && cp "$dir/.env" "$bk_dir/"
+        [ -f "$dir/docker-compose.yml" ] && cp "$dir/docker-compose.yml" "$bk_dir/"
+        [ -d "$dir/data" ] && cp -a "$dir/data" "$bk_dir/data" 2>/dev/null || true
+
+        if [ "$FW_TYPE" = "ufw" ]; then
+            ufw status numbered > "$bk_dir/ufw.rules" 2>/dev/null || true
+        fi
+        if command -v iptables &>/dev/null; then
+            iptables-save > "$bk_dir/iptables.rules" 2>/dev/null || true
+        fi
+
+        local bk_size
+        bk_size=$(du -sh "$bk_dir" 2>/dev/null | cut -f1)
+
+        cat > "$bk_dir/meta.json" << EOF
+{
+  "timestamp": "${timestamp}",
+  "target": "${target}",
+  "display": "${display}",
+  "reason": "${reason}",
+  "port": $(parse_db "$target" 3),
+  "dir": "${dir}",
+  "size": "${bk_size}"
+}
+EOF
+
+        ln -sfn "$bk_dir" "${BACKUP_DIR}/${target}/latest"
+        log "Backup $display salvo: ${timestamp}"
+    fi
+}
+
+list_backups() {
+    local target="${1:-all}"
+
+    echo ""
+
+    if [ "$target" != "all" ]; then
+        echo -e "  ${BD}${C}Backups de ${target}:${NC}"
+        echo ""
+
+        local bk_path="${BACKUP_DIR}/${target}"
+        if [ ! -d "$bk_path" ]; then
+            echo "  Nenhum backup encontrado."
+            echo ""; return
+        fi
+
+        local idx=1
+        for bk in $(ls -1r "$bk_path" 2>/dev/null | grep -v "^latest$"); do
+            local reason="" bk_size=""
+            if [ -f "$bk_path/$bk/meta.json" ]; then
+                reason=$(grep '"reason"' "$bk_path/$bk/meta.json" | cut -d'"' -f4)
+            fi
+            bk_size=$(du -sh "$bk_path/$bk" 2>/dev/null | cut -f1)
+            echo "    [$idx] $bk  ($reason, $bk_size)"
+            idx=$((idx + 1))
+        done
+
+        if [ "$idx" -eq 1 ]; then
+            echo "  Nenhum backup encontrado."
+        fi
+    else
+        echo -e "  ${BD}${C}Todos os backups:${NC}"
+        echo ""
+
+        local any=false
+        for target_dir in "$BACKUP_DIR"/*/; do
+            [ ! -d "$target_dir" ] && continue
+            local tname
+            tname=$(basename "$target_dir")
+            local count
+            count=$(ls -1 "$target_dir" 2>/dev/null | grep -v "^latest$" | wc -l)
+            if [ "$count" -gt 0 ]; then
+                echo "    ${BD}${tname}${NC} ($count backup(s))"
+                any=true
+            fi
+        done
+
+        if [ "$any" = "false" ]; then
+            echo "  Nenhum backup encontrado."
+        fi
+    fi
+
+    echo ""
+}
+
+restore_backup() {
+    local target="$1"
+    local timestamp="${2:-}"
+
+    local bk_path="${BACKUP_DIR}/${target}"
+
+    if [ -z "$timestamp" ]; then
+        if [ ! -L "$bk_path/latest" ]; then
+            warn "Nenhum backup encontrado para $target"
+            return 1
+        fi
+        bk_path=$(readlink -f "$bk_path/latest")
+        timestamp=$(basename "$bk_path")
+    else
+        bk_path="${BACKUP_DIR}/${target}/${timestamp}"
+    fi
+
+    if [ ! -d "$bk_path" ]; then
+        warn "Backup não encontrado: $timestamp"
+        return 1
+    fi
+
+    local display
+    display=$(parse_db "$target" 2)
+
+    warn "Restaurar $display do backup $timestamp?"
+    confirm "Certeza?" || return 0
+
+    if [ "$target" != "vps" ]; then
+        # Backup do estado atual antes de restaurar
+        create_backup "$target" "before-restore"
+
+        local dir
+        dir=$(parse_db "$target" 6)
+
+        # Para container
+        local container
+        container=$(parse_db "$target" 5)
+        local st
+        st=$(get_container_status "$container")
+        [ "$st" = "running" ] && (cd "$dir" && docker compose down --timeout 10 2>&1)
+
+        # Restaura arquivos
+        [ -f "$bk_path/.env" ] && cp "$bk_path/.env" "$dir/"
+        [ -f "$bk_path/docker-compose.yml" ] && cp "$bk_path/docker-compose.yml" "$dir/"
+        if [ -d "$bk_path/data" ]; then
+            rm -rf "$dir/data"
+            cp -a "$bk_path/data" "$dir/data"
+        fi
+
+        # Restaura firewall
+        if [ -f "$bk_path/iptables.rules" ] && command -v iptables-restore &>/dev/null; then
+            iptables-restore < "$bk_path/iptables.rules" 2>/dev/null
+            log "Regras iptables restauradas"
+        fi
+
+        # Reinicia
+        (cd "$dir" && docker compose up -d 2>&1)
+        sleep 2
+
+        log "$display restaurado do backup $timestamp"
+        show_info "$target"
+    else
+        info "Backup VPS: $bk_path"
+        echo ""
+        echo "  Arquivos no backup:"
+        ls -la "$bk_path" 2>/dev/null | grep -v "^total" | grep -v "^\."
+        echo ""
+        info "Para restaurar regras iptables: iptables-restore < $bk_path/iptables.rules"
+        info "Para restaurar UFW: verifique manualmente com 'ufw status'"
+    fi
+}
+
+# ============================================================
 # INSTALAR DOCKER
 # ============================================================
 
@@ -84,6 +470,8 @@ install_docker() {
     fi
 
     confirm "Instalar?" || return 0
+
+    create_backup "vps" "before-docker-install"
 
     echo ""
     info "Adicionando repositório Docker..."
@@ -116,6 +504,14 @@ install_db() {
     container=$(parse_db "$db" 5)
     port="$default_port"
 
+    # Detecção prévia
+    detect_vps_state
+    local vps_ok=$?
+    if [ $vps_ok -ne 0 ]; then
+        warn "Conflitos detectados"
+        confirm "Continuar mesmo assim?" || return 0
+    fi
+
     echo ""
     echo -e "  ${BD}${C}=== $display ===${NC}"
     echo ""
@@ -138,6 +534,14 @@ install_db() {
     fi
 
     confirm "Confirmar instalar?" || return 0
+
+    # Backup e firewall
+    create_backup "vps" "before-install-${db}"
+
+    if ask_firewall_choice; then
+        open_port "$port" "$display"
+        log "Porta $port liberada"
+    fi
 
     mkdir -p "$dir"
 
@@ -229,6 +633,8 @@ update_db() {
         warn "$display não instalado"
         return 1
     fi
+
+    create_backup "$db" "before-update"
 
     info "Atualizando $display..."
     (cd "$dir" && git pull --quiet)
@@ -353,6 +759,8 @@ remove_db() {
 
     warn "PARAR e REMOVER $display completamente"
     confirm "Certeza?" || return 0
+
+    create_backup "$db" "before-remove"
 
     (cd "$dir" && docker compose down -v --timeout 10 2>&1)
     rm -rf "$dir"
@@ -483,6 +891,8 @@ submenu_manage() {
         echo "    [D] Parar (docker compose down)"
         echo "    [S] Status (detalhes + conexão)"
         echo "    [L] Logs (acompanhar em tempo real)"
+        echo "    [B] Backup (criar backup manual)"
+        echo "    [R] Rollback (restaurar backup)"
         echo "    [X] Remover (deletar tudo)"
         echo "    [0] ← Voltar ao menu principal"
         echo ""
@@ -502,8 +912,112 @@ submenu_manage() {
                 pause ;;
             l) db_name=$(select_installed_db "Qual banco ver logs?") || continue
                logs_db "$db_name" ;;
+            b) db_name=$(select_installed_db "Qual banco fazer backup?") || continue
+               create_backup "$db_name" "manual"; pause ;;
+            r) db_name=$(select_installed_db "Qual banco restaurar?") || continue
+               restore_backup "$db_name"; pause ;;
             x) db_name=$(select_installed_db "Qual banco remover?") || continue
                remove_db "$db_name"; pause ;;
+            *) warn "Opção inválida" ;;
+        esac
+    done
+}
+
+# ============================================================
+# SUBMENU: BACKUPS
+# ============================================================
+
+submenu_backups() {
+    while true; do
+        clear
+        echo ""
+        echo -e "  ${BD}${C}← Backups${NC}"
+        echo ""
+
+        echo "    [1] Listar todos os backups"
+        echo "    [2] Listar backups por banco"
+        echo "    [3] Criar backup manual"
+        echo "    [4] Restaurar backup"
+        echo "    [0] ← Voltar ao menu principal"
+        echo ""
+
+        read -rp "  Escolha: " choice
+
+        case "$choice" in
+            1) list_backups "all"; pause ;;
+            2)
+                echo ""
+                echo "  Qual banco?"
+                local idx=1 db_names=()
+                while IFS='|' read -r name display _; do
+                    [ -z "$name" ] && continue
+                    echo "    [$idx] $display"
+                    db_names+=("$name"); idx=$((idx + 1))
+                done <<< "$DATABASES"
+                echo "    [0] Voltar"
+                echo ""
+                read -rp "  Escolha: " ch
+                [ "$ch" = "0" ] && continue
+                if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#db_names[@]}" ] 2>/dev/null; then
+                    list_backups "${db_names[$((ch - 1))]}"
+                fi
+                pause
+                ;;
+            3)
+                echo ""
+                echo "  O que fazer backup?"
+                echo "    [1] Banco específico"
+                echo "    [2] Estado da VPS"
+                echo "    [0] Voltar"
+                echo ""
+                read -rp "  Escolha: " bk_ch
+                case "$bk_ch" in
+                    1)
+                        local db_name
+                        db_name=$(select_installed_db "Qual banco?") || continue
+                        create_backup "$db_name" "manual"; pause
+                        ;;
+                    2)
+                        create_backup "vps" "manual"; pause
+                        ;;
+                esac
+                ;;
+            4)
+                local db_name
+                db_name=$(select_installed_db "Qual banco restaurar?") || continue
+
+                local bk_path="${BACKUP_DIR}/${db_name}"
+                if [ ! -d "$bk_path" ]; then
+                    warn "Nenhum backup para $db_name"; pause; continue
+                fi
+
+                echo ""
+                local bk_idx=1 bk_timestamps=()
+                for bk in $(ls -1r "$bk_path" 2>/dev/null | grep -v "^latest$"); do
+                    local reason=""
+                    [ -f "$bk_path/$bk/meta.json" ] && reason=$(grep '"reason"' "$bk_path/$bk/meta.json" | cut -d'"' -f4)
+                    local bk_size
+                    bk_size=$(du -sh "$bk_path/$bk" 2>/dev/null | cut -f1)
+                    echo "    [$bk_idx] $bk  ($reason, $bk_size)"
+                    bk_timestamps+=("$bk")
+                    bk_idx=$((bk_idx + 1))
+                done
+
+                if [ "$bk_idx" -eq 1 ]; then
+                    warn "Nenhum backup encontrado"; pause; continue
+                fi
+
+                echo "    [0] Voltar"
+                echo ""
+                read -rp "  Escolha: " bk_ch
+                [ "$bk_ch" = "0" ] && continue
+
+                if [ "$bk_ch" -ge 1 ] 2>/dev/null && [ "$bk_ch" -lt "$bk_idx" ] 2>/dev/null; then
+                    restore_backup "$db_name" "${bk_timestamps[$((bk_ch - 1))]}"
+                fi
+                pause
+                ;;
+            0) return ;;
             *) warn "Opção inválida" ;;
         esac
     done
@@ -567,6 +1081,7 @@ show_main_menu() {
     if [ "$any" = "true" ]; then
         echo "    [2] Gerenciar       atualizar, parar, status, remover"
     fi
+    echo "    [3] Backups         criar, listar, restaurar"
     echo "    [0] Sair"
     echo ""
 }
@@ -633,6 +1148,35 @@ parse_args() {
             [ -z "$args" ] && err "Uso: $0 remove <postgres|dragonfly>"
             for db in $args; do remove_db "$db"; done
             ;;
+        detect)
+            detect_vps_state
+            ;;
+        backup)
+            if [ -z "$args" ] || [ "$args" = "all" ]; then
+                create_backup "vps" "manual"
+                for db_line in $DATABASES; do
+                    local bn
+                    bn=$(echo "$db_line" | cut -d'|' -f1)
+                    db_exists "$bn" && create_backup "$bn" "manual"
+                done
+            elif [ "$args" = "vps" ]; then
+                create_backup "vps" "manual"
+            else
+                for db in $args; do
+                    db_exists "$db" && create_backup "$db" "manual" || warn "Não instalado: $db"
+                done
+            fi
+            ;;
+        backups)
+            list_backups "${args:-all}"
+            ;;
+        rollback)
+            local rt="${args%% *}"
+            local rts="${args#* }"
+            [ "$rts" = "$rt" ] && rts=""
+            [ -z "$rt" ] && err "Uso: $0 rollback <db|vps> [timestamp]"
+            restore_backup "$rt" "$rts"
+            ;;
         *)
             err "Uso:
   $0                           menu interativo
@@ -647,6 +1191,10 @@ parse_args() {
   $0 shell <db>                shell no container
   $0 psql                      shell psql (atalho)
   $0 remove <db>               remover banco
+  $0 detect                    detectar estado da VPS
+  $0 backup [db|vps|all]       criar backup
+  $0 backups [db]              listar backups
+  $0 rollback <db> [timestamp] restaurar backup
 
 Bancos: postgres, dragonfly"
             ;;
@@ -674,6 +1222,7 @@ interactive_menu() {
                     pause
                 fi
                 ;;
+            3) submenu_backups ;;
             0) echo ""; log "Até mais!"; exit 0 ;;
             *) warn "Opção inválida: $choice" ;;
         esac
