@@ -14,18 +14,24 @@ ask_firewall_choice() {
 
         case "$fw_ch" in
             1)
-                apt-get install -y ufw >/dev/null 2>&1
-                ufw default deny incoming >/dev/null 2>&1
-                ufw default allow outgoing >/dev/null 2>&1
-                ufw allow 22/tcp comment "SSH" >/dev/null 2>&1
-                ufw --force enable >/dev/null 2>&1
+                if ! apt-get install -y ufw >/dev/null 2>&1; then
+                    warn "Falha ao instalar UFW"; return 1
+                fi
+                if ! ufw default deny incoming >/dev/null 2>&1; then
+                    warn "Falha ao configurar UFW"; return 1
+                fi
+                ufw default allow outgoing >/dev/null 2>&1 || true
+                ufw allow 22/tcp comment "SSH" >/dev/null 2>&1 || true
+                if ! ufw --force enable >/dev/null 2>&1; then
+                    warn "Falha ao ativar UFW"; return 1
+                fi
                 FW_TYPE="ufw"; FW_ACTIVE=true
                 log "UFW instalado e ativado"
                 ;;
             2)
                 FW_TYPE="iptables"; FW_ACTIVE=true
-                iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null
-                iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null
+                iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
+                iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
                 log "iptables configurado"
                 ;;
             *)
@@ -42,12 +48,11 @@ ask_firewall_choice() {
     if [ "$FW_ACTIVE" = "true" ] && command -v "$alt_tool" &>/dev/null; then
         echo ""
         echo "    [1] ${FW_TYPE}"
-        local alt="iptables"; [ "$FW_TYPE" = "iptables" ] && alt="ufw"
-        echo "    [2] ${alt}"
+        echo "    [2] ${alt_tool}"
         echo ""
         read -rp "  Qual usar? [1/2]: " fw_pick
         if [ "$fw_pick" = "2" ]; then
-            FW_TYPE="$alt"
+            FW_TYPE="$alt_tool"
         fi
     fi
 
@@ -58,8 +63,8 @@ open_port() {
     local port="$1" comment="${2:-Database}"
 
     if [ "$FW_TYPE" = "ufw" ]; then
-        ufw allow "$port/tcp" comment "$comment" >/dev/null 2>&1
+        ufw allow "$port/tcp" comment "$comment" >/dev/null 2>&1 || warn "Falha ao liberar porta $port no UFW"
     elif [ "$FW_TYPE" = "iptables" ]; then
-        iptables -A INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null
+        iptables -A INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || warn "Falha ao liberar porta $port no iptables"
     fi
 }

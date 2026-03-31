@@ -37,7 +37,7 @@ detect_vps_state() {
     # Docker
     if has_docker; then
         local dver
-        dver=$(docker --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1)
+        dver=$(docker --version 2>/dev/null | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
         echo -e "    Docker:         ${G}● instalado${NC} (v${dver})"
     else
         echo -e "    Docker:         ${R}● não instalado${NC}"
@@ -51,11 +51,11 @@ detect_vps_state() {
     fi
 
     # Portas e diretórios
-    printf '%s\n' "$DATABASES" | while IFS='|' read -r db_name _ db_port _ _ db_dir; do
+    while IFS='|' read -r db_name _ db_port _ _ db_dir; do
         [ -z "$db_name" ] && continue
 
         local pid
-        pid=$(ss -tlnp 2>/dev/null | grep ":${db_port} " | grep -oP 'pid=\K[0-9]+' | head -1)
+        pid=$(ss -tlnp 2>/dev/null | grep ":${db_port} " | sed -n 's/.*pid=\([0-9]\+\).*/\1/p' | head -1)
 
         if [ -n "$pid" ]; then
             local pname
@@ -76,7 +76,7 @@ detect_vps_state() {
         else
             echo -e "    ${db_dir}:  ${G}● livre${NC}"
         fi
-    done
+    done <<< "$DATABASES"
 
     # Serviços nativos
     if systemctl is-active postgresql &>/dev/null 2>&1; then

@@ -11,11 +11,11 @@ select_installed_db() {
 
     echo "" >&2
     local idx=1 names=()
-    printf '%s\n' "$installed_raw" | while IFS='|' read -r name display _; do
+    while IFS='|' read -r name display _; do
         [ -z "$name" ] && continue
         echo "  [$idx] $display" >&2
         names+=("$name"); idx=$((idx + 1))
-    done
+    done <<< "$installed_raw"
     echo "  [0] Voltar" >&2
     echo "" >&2
 
@@ -49,7 +49,7 @@ submenu_install() {
 
         echo -e "  ${BD}Bancos:${NC}"
         local db_names=()
-        printf '%s\n' "$DATABASES" | while IFS='|' read -r name display port _; do
+        while IFS='|' read -r name display port _; do
             [ -z "$name" ] && continue
             if db_exists "$name"; then
                 echo -e "    [$idx] $display (porta $port) ${G}já instalado${NC}"
@@ -57,7 +57,7 @@ submenu_install() {
                 echo "    [$idx] $display (porta $port)"
             fi
             db_names+=("$name"); idx=$((idx + 1))
-        done
+        done <<< "$DATABASES"
 
         echo ""
         echo "    [0] ← Voltar ao menu principal"
@@ -99,7 +99,7 @@ submenu_manage() {
         echo -e "  ${BD}Bancos instalados:${NC}"
         echo ""
         local names=()
-        printf '%s\n' "$installed_raw" | while IFS='|' read -r name display port status dir; do
+        while IFS='|' read -r name display port status dir; do
             [ -z "$name" ] && continue
             if [ "$status" = "running" ]; then
                 echo -e "    ${G}●${NC} $display (porta $port) rodando"
@@ -107,7 +107,7 @@ submenu_manage() {
                 echo -e "    ${R}●${NC} $display (porta $port) parado"
             fi
             names+=("$name")
-        done
+        done <<< "$installed_raw"
 
         echo ""
         echo -e "  ${BD}O que fazer?${NC}"
@@ -170,11 +170,11 @@ submenu_backups() {
                 echo ""
                 echo "  Qual banco?"
                 local idx=1 db_names=()
-                printf '%s\n' "$DATABASES" | while IFS='|' read -r name display _; do
+                while IFS='|' read -r name display _; do
                     [ -z "$name" ] && continue
                     echo "    [$idx] $display"
                     db_names+=("$name"); idx=$((idx + 1))
-                done
+                done <<< "$DATABASES"
                 echo "    [0] Voltar"
                 echo ""
                 read -rp "  Escolha: " ch
@@ -266,7 +266,7 @@ show_main_menu() {
     echo ""
 
     local any=false
-    printf '%s\n' "$DATABASES" | while IFS='|' read -r name display port repo container dir; do
+    while IFS='|' read -r name display port repo container dir; do
         [ -z "$name" ] && continue
         local st="" color="${Y}" tag="não instalado"
         if echo "$installed_raw" | grep -q "^${name}|"; then
@@ -286,7 +286,7 @@ show_main_menu() {
                 echo "      → redis-cli -h localhost -p $port"
             fi
         fi
-    done
+    done <<< "$DATABASES"
 
     echo ""
     echo -e "  ${BD}Menu${NC}"

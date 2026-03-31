@@ -48,6 +48,11 @@ EOF
             return 1
         fi
 
+        if [ ! -d "$dir" ] || [ ! -f "$dir/docker-compose.yml" ]; then
+            warn "$display não instalado, nada para fazer backup"
+            return 1
+        fi
+
         local bk_dir="${BACKUP_DIR}/${target}/${timestamp}"
         mkdir -p "$bk_dir"
 
@@ -125,7 +130,7 @@ list_backups() {
             local count
             count=$(ls -1 "$target_dir" 2>/dev/null | grep -v "^latest$" | wc -l)
             if [ "$count" -gt 0 ]; then
-                echo "    ${BD}${tname}${NC} ($count backup(s))"
+                echo -e "    ${BD}${tname}${NC} ($count backup(s))"
                 any=true
             fi
         done
@@ -175,10 +180,19 @@ restore_backup() {
     confirm "Certeza?" || return 0
 
     if [ "$target" != "vps" ]; then
-        create_backup "$target" "before-restore"
-
         local dir
         dir=$(parse_db "$target" 6)
+
+        if [ -z "$dir" ]; then
+            warn "Banco desconhecido para restore: '$target'"
+            return 1
+        fi
+
+        if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
+            create_backup "$target" "before-restore" || true
+        fi
+
+        mkdir -p "$dir"
 
         local container
         container=$(parse_db "$target" 5)
@@ -191,11 +205,6 @@ restore_backup() {
         if [ -d "$bk_path/data" ]; then
             rm -rf "$dir/data"
             cp -a "$bk_path/data" "$dir/data"
-        fi
-
-        if [ -f "$bk_path/iptables.rules" ] && command -v iptables-restore &>/dev/null; then
-            iptables-restore < "$bk_path/iptables.rules" 2>/dev/null
-            log "Regras iptables restauradas"
         fi
 
         (cd "$dir" && docker compose up -d 2>&1)

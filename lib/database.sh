@@ -67,8 +67,13 @@ install_db() {
 
     if [ -f "$dir/.env.example" ] && [ ! -f "$dir/.env" ]; then
         cp "$dir/.env.example" "$dir/.env"
-        [ "$db" = "postgres" ] && [ "$port" != "$default_port" ] && sed -i "s/^PG_PORT=.*/PG_PORT=$port/" "$dir/.env"
-        [ "$db" = "dragonfly" ] && [ "$port" != "$default_port" ] && sed -i "s/^DF_PORT=.*/DF_PORT=$port/" "$dir/.env"
+    fi
+
+    if [ -f "$dir/.env" ] && [ "$port" != "$default_port" ]; then
+        case "$db" in
+            postgres) sed -i "s/^PG_PORT=.*/PG_PORT=$port/" "$dir/.env" ;;
+            dragonfly) sed -i "s/^DF_PORT=.*/DF_PORT=$port/" "$dir/.env" ;;
+        esac
     fi
 
     chmod +x "$dir"/*.sh 2>/dev/null || true
@@ -94,6 +99,10 @@ install_db() {
 
 start_db() {
     local db="$1"
+    if ! db_info_valid "$db"; then
+        warn "Banco desconhecido: '$db'"
+        return 1
+    fi
     local dir display container
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
 
@@ -113,6 +122,10 @@ start_db() {
 
 stop_db() {
     local db="$1"
+    if ! db_info_valid "$db"; then
+        warn "Banco desconhecido: '$db'"
+        return 1
+    fi
     local dir display
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
     db_exists "$db" || { warn "$display não instalado"; return 1; }
@@ -133,7 +146,9 @@ update_db() {
     create_backup "$db" "before-update"
 
     info "Atualizando $display..."
-    (cd "$dir" && git pull --quiet)
+    if ! (cd "$dir" && git pull --quiet 2>&1); then
+        warn "Git pull falhou. Continuando com código atual..."
+    fi
 
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
@@ -163,6 +178,10 @@ remove_db() {
 
 status_db() {
     local db="$1"
+    if ! db_info_valid "$db"; then
+        warn "Banco desconhecido: '$db'"
+        return 1
+    fi
     local dir display port container
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
     port=$(parse_db "$db" 3); container=$(parse_db "$db" 5)
@@ -184,6 +203,7 @@ status_db() {
 
 show_info() {
     local db="$1"
+    if ! db_info_valid "$db"; then return 1; fi
     local dir display port
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); port=$(parse_db "$db" 3)
 
@@ -191,9 +211,9 @@ show_info() {
     if [ "$db" = "postgres" ]; then
         local user="postgres" pass="postgres_dev_2026" dbname="devdb"
         [ -f "$dir/.env" ] && {
-            user=$(grep "^PG_USER=" "$dir/.env" | cut -d= -f2)
-            pass=$(grep "^PG_PASS=" "$dir/.env" | cut -d= -f2)
-            dbname=$(grep "^PG_DB=" "$dir/.env" | cut -d= -f2)
+            user=$(grep -m1 "^PG_USER=" "$dir/.env" | cut -d= -f2)
+            pass=$(grep -m1 "^PG_PASS=" "$dir/.env" | cut -d= -f2)
+            dbname=$(grep -m1 "^PG_DB=" "$dir/.env" | cut -d= -f2)
         }
         echo "  Host:     localhost"
         echo "  Port:     $port"
@@ -204,7 +224,7 @@ show_info() {
         echo "  Connect: psql -h localhost -p $port -U $user -d $dbname"
     elif [ "$db" = "dragonfly" ]; then
         local pass="dragonfly_dev_2026"
-        [ -f "$dir/.env" ] && pass=$(grep "^DF_PASS=" "$dir/.env" | cut -d= -f2)
+        [ -f "$dir/.env" ] && pass=$(grep -m1 "^DF_PASS=" "$dir/.env" | cut -d= -f2)
         echo "  Host: localhost"
         echo "  Port: $port"
         echo "  Pass: $pass"
