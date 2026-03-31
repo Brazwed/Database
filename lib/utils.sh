@@ -20,7 +20,7 @@ get_container_status() {
 parse_db() {
     local db="$1" field="$2"
     local _name _display _port _repo _container _dir
-    while IFS='|' read -r _name _display _port _repo _container _dir; do
+    printf '%s\n' "$DATABASES" | while IFS='|' read -r _name _display _port _repo _container _dir; do
         if [ "$_name" = "$db" ]; then
             case "$field" in
                 1) echo "$_name" ;;
@@ -32,7 +32,7 @@ parse_db() {
             esac
             return 0
         fi
-    done <<< "$DATABASES"
+    done
     return 1
 }
 
@@ -44,13 +44,13 @@ db_exists() {
 
 get_installed_list() {
     local result=""
-    while IFS='|' read -r name display port repo container dir; do
+    printf '%s\n' "$DATABASES" | while IFS='|' read -r name display port repo container dir; do
         [ -z "$name" ] && continue
         if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
             local st
             st=$(get_container_status "$container")
             result="${result}${name}|${display}|${port}|${st}|${dir}\n"
         fi
-    done <<< "$DATABASES"
+    done
     printf '%b' "$result"
 }

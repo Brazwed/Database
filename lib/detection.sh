@@ -51,7 +51,7 @@ detect_vps_state() {
     fi
 
     # Portas e diretórios
-    while IFS='|' read -r db_name _ db_port _ _ db_dir; do
+    printf '%s\n' "$DATABASES" | while IFS='|' read -r db_name _ db_port _ _ db_dir; do
         [ -z "$db_name" ] && continue
 
         local pid
@@ -76,7 +76,7 @@ detect_vps_state() {
         else
             echo -e "    ${db_dir}:  ${G}● livre${NC}"
         fi
-    done <<< "$DATABASES"
+    done
 
     # Serviços nativos
     if systemctl is-active postgresql &>/dev/null 2>&1; then
