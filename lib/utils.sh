@@ -17,7 +17,7 @@ get_container_status() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$1" && echo "running" || echo "stopped"
 }
 
-parse_db() { echo "$DATABASES" | grep "^${1}|" | cut -d'|' -f"$2"; }
+parse_db() { echo "$DATABASES" | grep "^${1}\|" | cut -d'|' -f"$2"; }
 
 db_exists() {
     local dir

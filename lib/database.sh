@@ -4,10 +4,6 @@ install_db() {
     local db="$1"
     local display default_port repo container dir="/opt/db-${db}" port
 
-    # DEBUG
-    echo "[DEBUG] db=$db DATABASES=[${DATABASES:0:80}]"
-    echo "[DEBUG] parse_db_2=[${display:-EMPTY}]"
-
     display=$(parse_db "$db" 2)
     default_port=$(parse_db "$db" 3)
     repo=$(parse_db "$db" 4)
