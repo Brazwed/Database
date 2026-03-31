@@ -8,6 +8,8 @@ install_db() {
     default_port=$(parse_db "$db" 3)
     repo=$(parse_db "$db" 4)
     container=$(parse_db "$db" 5)
+
+    echo "[DBG] db=$db display=[$display] dir=[$dir] port=[$port] repo=[$repo]"
     port="$default_port"
 
     detect_vps_state

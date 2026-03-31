@@ -19,6 +19,7 @@ get_container_status() {
 
 parse_db() {
     local db="$1" field="$2"
+    local _name _display _port _repo _container _dir
     while IFS='|' read -r _name _display _port _repo _container _dir; do
         if [ "$_name" = "$db" ]; then
             case "$field" in
@@ -29,9 +30,10 @@ parse_db() {
                 5) echo "$_container" ;;
                 6) echo "$_dir" ;;
             esac
-            return
+            return 0
         fi
     done <<< "$DATABASES"
+    return 1
 }
 
 db_exists() {
