@@ -3,7 +3,15 @@
 
 # Database data directories
 **/data/
+
+# Test directory
 /test/
+
+# Internal planning docs (não vai pro git)
+*.md
+!README.md
+!db-*/README.md
+!lib/*.sh
 
 # OS files
 .DS_Store
