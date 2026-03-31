@@ -17,7 +17,22 @@ get_container_status() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$1" && echo "running" || echo "stopped"
 }
 
-parse_db() { echo "$DATABASES" | grep "^${1}\|" | cut -d'|' -f"$2"; }
+parse_db() {
+    local db="$1" field="$2"
+    while IFS='|' read -r _name _display _port _repo _container _dir; do
+        if [ "$_name" = "$db" ]; then
+            case "$field" in
+                1) echo "$_name" ;;
+                2) echo "$_display" ;;
+                3) echo "$_port" ;;
+                4) echo "$_repo" ;;
+                5) echo "$_container" ;;
+                6) echo "$_dir" ;;
+            esac
+            return
+        fi
+    done <<< "$DATABASES"
+}
 
 db_exists() {
     local dir
