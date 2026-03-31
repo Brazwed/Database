@@ -50,37 +50,31 @@ detect_vps_state() {
         echo "    Containers:     ${containers:-nenhum}"
     fi
 
-    # Portas
-    for db_line in $DATABASES; do
-        local name port
-        name=$(echo "$db_line" | cut -d'|' -f1)
-        port=$(echo "$db_line" | cut -d'|' -f3)
+    # Portas e diretórios
+    while IFS='|' read -r db_name _ db_port _ _ db_dir; do
+        [ -z "$db_name" ] && continue
 
         local pid
-        pid=$(ss -tlnp 2>/dev/null | grep ":${port} " | grep -oP 'pid=\K[0-9]+' | head -1)
+        pid=$(ss -tlnp 2>/dev/null | grep ":${db_port} " | grep -oP 'pid=\K[0-9]+' | head -1)
 
         if [ -n "$pid" ]; then
             local pname
             pname=$(ps -p "$pid" -o comm= 2>/dev/null || echo "?")
-            echo -e "    Porta ${port}:     ${Y}● USADA${NC} (${pname}, PID ${pid})"
+            echo -e "    Porta ${db_port}:     ${Y}● USADA${NC} (${pname}, PID ${pid})"
             conflicts=true
         else
-            echo -e "    Porta ${port}:     ${G}● livre${NC}"
+            echo -e "    Porta ${db_port}:     ${G}● livre${NC}"
         fi
-    done
 
-    # Diretórios
-    while IFS='|' read -r name display _ _ _ dir; do
-        [ -z "$name" ] && continue
-        if [ -d "$dir" ]; then
-            if [ -f "$dir/docker-compose.yml" ]; then
-                echo -e "    ${dir}:  ${Y}● EXISTE${NC} (instalado)"
+        if [ -d "$db_dir" ]; then
+            if [ -f "$db_dir/docker-compose.yml" ]; then
+                echo -e "    ${db_dir}:  ${Y}● EXISTE${NC} (instalado)"
             else
-                echo -e "    ${dir}:  ${Y}● EXISTE${NC} (vazio)"
+                echo -e "    ${db_dir}:  ${Y}● EXISTE${NC} (vazio)"
                 conflicts=true
             fi
         else
-            echo -e "    ${dir}:  ${G}● livre${NC}"
+            echo -e "    ${db_dir}:  ${G}● livre${NC}"
         fi
     done <<< "$DATABASES"
 

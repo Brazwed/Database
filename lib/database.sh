@@ -9,7 +9,6 @@ install_db() {
     repo=$(parse_db "$db" 4)
     container=$(parse_db "$db" 5)
 
-    echo "[DBG] db=$db display=[$display] dir=[$dir] port=[$port] repo=[$repo]"
     port="$default_port"
 
     detect_vps_state
@@ -56,7 +55,9 @@ install_db() {
         (cd "$dir" && git pull --quiet) || true
     else
         info "Baixando $display..."
-        git clone --quiet "${GITHUB_BASE}/${repo}.git" "$dir"
+        if ! git clone "${GITHUB_BASE}/${repo}.git" "$dir" 2>&1; then
+            err "Falha ao clonar ${GITHUB_BASE}/${repo}.git"
+        fi
     fi
 
     if [ -f "$dir/.env.example" ] && [ ! -f "$dir/.env" ]; then
@@ -66,6 +67,10 @@ install_db() {
     fi
 
     chmod +x "$dir"/*.sh 2>/dev/null || true
+
+    if ! has_docker; then
+        err "Docker não instalado. Execute: $0 install docker"
+    fi
 
     info "Subindo $display..."
     (cd "$dir" && docker compose up -d 2>&1)
