@@ -43,6 +43,11 @@ EOF
         dir=$(parse_db "$target" 6)
         display=$(parse_db "$target" 2)
 
+        if [ -z "$dir" ]; then
+            warn "Banco desconhecido para backup: '$target'"
+            return 1
+        fi
+
         local bk_dir="${BACKUP_DIR}/${target}/${timestamp}"
         mkdir -p "$bk_dir"
 
@@ -156,7 +161,15 @@ restore_backup() {
     fi
 
     local display
-    display=$(parse_db "$target" 2)
+    if [ "$target" != "vps" ]; then
+        display=$(parse_db "$target" 2)
+        if [ -z "$display" ]; then
+            warn "Banco desconhecido para restore: '$target'"
+            return 1
+        fi
+    else
+        display="VPS"
+    fi
 
     warn "Restaurar $display do backup $timestamp?"
     confirm "Certeza?" || return 0

@@ -11,7 +11,7 @@ info() { echo -e "${B}[●]${NC} $1"; }
 confirm() { read -rp "${1:-Confirmar?} [Y/n] " c; [[ -z "$c" || "$c" =~ ^[yY]$ ]]; }
 pause()   { read -rp "  Pressione Enter..." _; }
 
-has_docker() { command -v docker &>/dev/null && docker info &>/dev/null 2>&1; }
+has_docker() { command -v docker &>/dev/null && docker info &>/dev/null; }
 
 get_container_status() {
     docker ps --format '{{.Names}}' 2>/dev/null | grep -q "$1" && echo "running" || echo "stopped"
@@ -19,8 +19,10 @@ get_container_status() {
 
 parse_db() {
     local db="$1" field="$2"
+    [ -z "$db" ] && return 1
     local _name _display _port _repo _container _dir
-    printf '%s\n' "$DATABASES" | while IFS='|' read -r _name _display _port _repo _container _dir; do
+    while IFS='|' read -r _name _display _port _repo _container _dir; do
+        [ -z "$_name" ] && continue
         if [ "$_name" = "$db" ]; then
             case "$field" in
                 1) echo "$_name" ;;
@@ -32,8 +34,14 @@ parse_db() {
             esac
             return 0
         fi
-    done
+    done <<< "$DATABASES"
     return 1
+}
+
+db_info_valid() {
+    local dir
+    dir=$(parse_db "$1" 6)
+    [ -n "$dir" ]
 }
 
 db_exists() {
@@ -44,13 +52,13 @@ db_exists() {
 
 get_installed_list() {
     local result=""
-    printf '%s\n' "$DATABASES" | while IFS='|' read -r name display port repo container dir; do
+    while IFS='|' read -r name display port repo container dir; do
         [ -z "$name" ] && continue
         if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
             local st
             st=$(get_container_status "$container")
             result="${result}${name}|${display}|${port}|${st}|${dir}\n"
         fi
-    done
+    done <<< "$DATABASES"
     printf '%b' "$result"
 }

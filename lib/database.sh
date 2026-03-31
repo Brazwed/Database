@@ -2,12 +2,17 @@
 
 install_db() {
     local db="$1"
-    local display default_port repo container dir="/opt/db-${db}" port
+    local display default_port repo container dir port
+
+    if ! db_info_valid "$db"; then
+        err "Banco desconhecido: '$db'. Bancos válidos: postgres, dragonfly"
+    fi
 
     display=$(parse_db "$db" 2)
     default_port=$(parse_db "$db" 3)
     repo=$(parse_db "$db" 4)
     container=$(parse_db "$db" 5)
+    dir=$(parse_db "$db" 6)
 
     port="$default_port"
 
@@ -214,7 +219,7 @@ logs_db() {
     db_exists "$db" || { warn "$display não instalado"; return 1; }
 
     info "Logs de $display (Ctrl+C pra sair)..."
-    docker compose -f "$dir/docker-compose.yml" logs -f
+    (cd "$dir" && docker compose logs -f)
 }
 
 shell_db() {
@@ -226,5 +231,5 @@ shell_db() {
     st=$(get_container_status "$container")
     [ "$st" != "running" ] && { warn "$display não rodando. Use: $0 up $db"; return 1; }
 
-    docker compose -f "$dir/docker-compose.yml" exec -it "$container" sh
+    (cd "$dir" && docker compose exec -it "$container" sh)
 }

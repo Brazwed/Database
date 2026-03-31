@@ -62,9 +62,9 @@ parse_args() {
             ;;
         status)
             if [ -z "$args" ]; then
-                printf '%s\n' "$DATABASES" | while IFS='|' read -r name _; do
+                while IFS='|' read -r name _; do
                     [ -n "$name" ] && db_exists "$name" && status_db "$name"
-                done
+                done <<< "$DATABASES"
             else
                 for db in $args; do status_db "$db"; done
             fi
@@ -90,11 +90,9 @@ parse_args() {
         backup)
             if [ -z "$args" ] || [ "$args" = "all" ]; then
                 create_backup "vps" "manual"
-                printf '%s\n' "$DATABASES" | while read -r db_line; do
-                    local bn
-                    bn=$(echo "$db_line" | cut -d'|' -f1)
-                    db_exists "$bn" && create_backup "$bn" "manual"
-                done
+                while IFS='|' read -r bn _; do
+                    [ -n "$bn" ] && db_exists "$bn" && create_backup "$bn" "manual"
+                done <<< "$DATABASES"
             elif [ "$args" = "vps" ]; then
                 create_backup "vps" "manual"
             else

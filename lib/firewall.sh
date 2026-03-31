@@ -38,7 +38,8 @@ ask_firewall_choice() {
     read -rp "  Liberar porta no firewall? [Y/n] " fw_go
     [[ "$fw_go" =~ ^[nN]$ ]] && return 1
 
-    if [ "$FW_ACTIVE" = "true" ] && command -v ufw &>/dev/null && command -v iptables &>/dev/null; then
+    local alt_tool="iptables"; [ "$FW_TYPE" = "iptables" ] && alt_tool="ufw"
+    if [ "$FW_ACTIVE" = "true" ] && command -v "$alt_tool" &>/dev/null; then
         echo ""
         echo "    [1] ${FW_TYPE}"
         local alt="iptables"; [ "$FW_TYPE" = "iptables" ] && alt="ufw"
