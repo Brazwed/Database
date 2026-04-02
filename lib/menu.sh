@@ -1,84 +1,153 @@
 # lib/menu.sh - Menus interativos
 
-SEP='━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
-
 select_installed_db() {
-    local installed_raw names=()
+    local prompt="$1"
+    local installed_raw
     installed_raw=$(get_installed_list)
-    [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ] && { echo ""; return 1; }
 
-    local idx=1
+    if [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
+        warn "Nenhum banco instalado" >&2; return 1
+    fi
+
+    echo "" >&2
+    local idx=1 names=()
     while IFS='|' read -r name display _; do
         [ -z "$name" ] && continue
         echo "  [$idx] $display" >&2
-        names+=("$name")
-        idx=$((idx + 1))
+        names+=("$name"); idx=$((idx + 1))
     done <<< "$installed_raw"
-
     echo "  [0] Voltar" >&2
-    read -rp "  Escolha: " ch
+    echo "" >&2
 
+    read -rp "  $prompt: " ch >&2
     [ "$ch" = "0" ] && return 1
-    [ -z "${names[$((ch - 1))]:-}" ] && { echo ""; return 1; }
-    echo "${names[$((ch - 1))]}"
+
+    if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#names[@]}" ] 2>/dev/null; then
+        echo "${names[$((ch - 1))]}"; return 0
+    fi
+    warn "Inválido" >&2; return 1
 }
 
-# ─── SUBMENU: INSTALAR ──────────────────────────────────────
 submenu_install() {
-    echo ""
-    echo -e "  ${BD}${C}Instalar banco${NC}"
-    echo ""
+    while true; do
+        clear
+        echo ""
+        echo -e "  ${BD}${C}← Instalar${NC}"
+        echo ""
+        echo "  O que você quer instalar?"
+        echo ""
 
-    local db_names=() idx=1
+        local idx=1 docker_idx="" docker_opt=false
 
-    while IFS='|' read -r cat name display port _; do
-        [ -z "$name" ] && continue
-        local marker=""
-        db_exists "$name" && marker=" ${G}(já instalado)${NC}"
-        echo -e "    [$idx] $display (:$port)$marker"
-        db_names+=("$name")
-        idx=$((idx + 1))
-    done <<< "$DATABASES"
+        if ! has_docker; then
+            echo "    [1] Docker Engine + Compose"
+            echo ""
+            echo "  Necessário pra rodar os bancos."
+            echo ""
+            docker_idx=1; docker_opt=true; idx=$((idx + 1))
+        fi
 
-    echo ""
-    echo "    [0] Voltar"
-    echo ""
-    read -rp "  Escolha: " ch
-    [ "$ch" = "0" ] && return
-    local n=${db_names[$((ch - 1))]:-}
-    [ -z "$n" ] && return
-    install_db "$n"
+        echo -e "  ${BD}Bancos:${NC}"
+        local db_names=()
+        while IFS='|' read -r cat name display port _; do
+            [ -z "$name" ] && continue
+            if db_exists "$name"; then
+                echo -e "    [$idx] $display (porta $port) ${G}já instalado${NC}"
+            else
+                echo "    [$idx] $display (porta $port)"
+            fi
+            db_names+=("$name"); idx=$((idx + 1))
+        done <<< "$DATABASES"
+
+        echo ""
+        echo "    [0] ← Voltar ao menu principal"
+        echo ""
+
+        read -rp "  Escolha: " choice
+        [ "$choice" = "0" ] && return
+
+        if [ "$docker_opt" = "true" ] && [ "$choice" = "$docker_idx" ]; then
+            install_docker; pause; continue
+        fi
+
+        local adj=$choice
+        [ "$docker_opt" = "true" ] && adj=$((choice - 1))
+
+        if [ "$adj" -ge 1 ] 2>/dev/null && [ "$adj" -le "${#db_names[@]}" ] 2>/dev/null; then
+            install_db "${db_names[$((adj - 1))]}"; pause; continue
+        fi
+
+        warn "Opção inválida"
+    done
 }
 
-# ─── SUBMENU: GERENCIAR ─────────────────────────────────────
 submenu_manage() {
-    echo ""
-    echo -e "  ${BD}${C}Gerenciar banco${NC}"
+    while true; do
+        clear
+        echo ""
+        echo -e "  ${BD}${C}← Gerenciar bancos${NC}"
+        echo ""
 
-    local db
-    db=$(select_installed_db) || return
-    [ -z "$db" ] && return
+        local installed_raw
+        installed_raw=$(get_installed_list)
 
-    echo ""
-    echo "    [1] Update        atualizar código"
-    echo "    [2] Down          parar container"
-    echo "    [3] Up            iniciar container"
-    echo "    [4] Logs          acompanhar logs"
-    echo "    [5] Remove        remover completamente"
-    echo "    [0] Voltar"
-    echo ""
-    read -rp "  Escolha: " ch
+        if [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
+            echo "  Nenhum banco instalado."
+            echo ""; pause; return
+        fi
 
-    case "$ch" in
-        1) update_db "$db" ;;
-        2) stop_db "$db" ;;
-        3) start_db "$db" ;;
-        4) logs_db "$db" ;;
-        5) remove_db "$db" ;;
-    esac
+        echo -e "  ${BD}Bancos instalados:${NC}"
+        echo ""
+        local names=()
+        while IFS='|' read -r name display port status dir; do
+            [ -z "$name" ] && continue
+            if [ "$status" = "running" ]; then
+                echo -e "    ${G}●${NC} $display (porta $port) rodando"
+            else
+                echo -e "    ${R}●${NC} $display (porta $port) parado"
+            fi
+            names+=("$name")
+        done <<< "$installed_raw"
+
+        echo ""
+        echo -e "  ${BD}O que fazer?${NC}"
+        echo ""
+        echo "    [U] Atualizar (git pull + restart/up)"
+        echo "    [D] Parar (docker compose down)"
+        echo "    [S] Status (detalhes + conexão)"
+        echo "    [L] Logs (acompanhar em tempo real)"
+        echo "    [B] Backup (criar backup manual)"
+        echo "    [R] Rollback (restaurar backup)"
+        echo "    [X] Remover (deletar tudo)"
+        echo "    [0] ← Voltar ao menu principal"
+        echo ""
+
+        read -rp "  Escolha: " action
+        [ "$action" = "0" ] && return
+        action=$(echo "$action" | tr '[:upper:]' '[:lower:]')
+
+        local db_name
+        case "$action" in
+            u) db_name=$(select_installed_db "Qual banco atualizar?") || continue
+               update_db "$db_name"; pause ;;
+            d) db_name=$(select_installed_db "Qual banco parar?") || continue
+               stop_db "$db_name"; pause ;;
+            s)
+                for name in "${names[@]}"; do status_db "$name"; done
+                pause ;;
+            l) db_name=$(select_installed_db "Qual banco ver logs?") || continue
+               logs_db "$db_name" ;;
+            b) db_name=$(select_installed_db "Qual banco fazer backup?") || continue
+               create_backup "$db_name" "manual"; pause ;;
+            r) db_name=$(select_installed_db "Qual banco restaurar?") || continue
+               restore_backup "$db_name"; pause ;;
+            x) db_name=$(select_installed_db "Qual banco remover?") || continue
+               remove_db "$db_name"; pause ;;
+            *) warn "Opção inválida" ;;
+        esac
+    done
 }
 
-# ─── SUBMENU: CONECTAR ──────────────────────────────────────
 submenu_connect() {
     local installed_raw running_names=()
     installed_raw=$(get_installed_list)
@@ -94,18 +163,21 @@ submenu_connect() {
     fi
 
     echo ""
-    echo -e "  ${BD}${C}Conectar${NC}"
+    echo -e "  ${BD}${C}← Conectar${NC}"
+    echo ""
+    echo "  Bancos rodando:"
     echo ""
 
     local idx=1
     for item in "${running_names[@]}"; do
         local name display port
         IFS='|' read -r name display port <<< "$item"
-        echo "  [$idx] $display (:$port)"
+        echo "  [$idx] $display (porta $port)"
         idx=$((idx + 1))
     done
 
     echo "  [0] Voltar"
+    echo ""
     read -rp "  Escolha: " ch
     [ "$ch" = "0" ] && return
 
@@ -118,7 +190,100 @@ submenu_connect() {
     shell_db "$n"
 }
 
-# ─── MENU PRINCIPAL ─────────────────────────────────────────
+submenu_backups() {
+    while true; do
+        clear
+        echo ""
+        echo -e "  ${BD}${C}← Backups${NC}"
+        echo ""
+
+        echo "    [1] Listar todos os backups"
+        echo "    [2] Listar backups por banco"
+        echo "    [3] Criar backup manual"
+        echo "    [4] Restaurar backup"
+        echo "    [0] ← Voltar ao menu principal"
+        echo ""
+
+        read -rp "  Escolha: " choice
+
+        case "$choice" in
+            1) list_backups "all"; pause ;;
+            2)
+                echo ""
+                echo "  Qual banco?"
+                local idx=1 db_names=()
+                while IFS='|' read -r cat name display _; do
+                    [ -z "$name" ] && continue
+                    echo "    [$idx] $display"
+                    db_names+=("$name"); idx=$((idx + 1))
+                done <<< "$DATABASES"
+                echo "    [0] Voltar"
+                echo ""
+                read -rp "  Escolha: " ch
+                [ "$ch" = "0" ] && continue
+                if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#db_names[@]}" ] 2>/dev/null; then
+                    list_backups "${db_names[$((ch - 1))]}"
+                fi
+                pause
+                ;;
+            3)
+                echo ""
+                echo "  O que fazer backup?"
+                echo "    [1] Banco específico"
+                echo "    [2] Estado da VPS"
+                echo "    [0] Voltar"
+                echo ""
+                read -rp "  Escolha: " bk_ch
+                case "$bk_ch" in
+                    1)
+                        local db_name
+                        db_name=$(select_installed_db "Qual banco?") || continue
+                        create_backup "$db_name" "manual"; pause
+                        ;;
+                    2) create_backup "vps" "manual"; pause ;;
+                esac
+                ;;
+            4)
+                local db_name
+                db_name=$(select_installed_db "Qual banco restaurar?") || continue
+
+                local bk_path="${BACKUP_DIR}/${db_name}"
+                if [ ! -d "$bk_path" ]; then
+                    warn "Nenhum backup para $db_name"; pause; continue
+                fi
+
+                echo ""
+                local bk_idx=1 bk_timestamps=()
+                for bk in $(ls -1r "$bk_path" 2>/dev/null | grep -v "^latest$"); do
+                    local reason=""
+                    [ -f "$bk_path/$bk/meta.json" ] && reason=$(grep '"reason"' "$bk_path/$bk/meta.json" | cut -d'"' -f4)
+                    local bk_size
+                    bk_size=$(du -sh "$bk_path/$bk" 2>/dev/null | cut -f1)
+                    echo "    [$bk_idx] $bk  ($reason, $bk_size)"
+                    bk_timestamps+=("$bk")
+                    bk_idx=$((bk_idx + 1))
+                done
+
+                if [ "$bk_idx" -eq 1 ]; then
+                    warn "Nenhum backup encontrado"; pause; continue
+                fi
+
+                echo "    [0] Voltar"
+                echo ""
+                read -rp "  Escolha: " bk_ch
+                [ "$bk_ch" = "0" ] && continue
+
+                if [ "$bk_ch" -ge 1 ] 2>/dev/null && [ "$bk_ch" -lt "$bk_idx" ] 2>/dev/null; then
+                    restore_backup "$db_name" "${bk_timestamps[$((bk_ch - 1))]}"
+                fi
+                pause
+                ;;
+            0) return ;;
+            *) warn "Opção inválida" ;;
+        esac
+    done
+}
+
 show_main_menu() {
     local installed_raw has_installed=false
     installed_raw=$(get_installed_list)
@@ -141,10 +306,11 @@ show_main_menu() {
     fi
     echo ""
 
+    local SEP='━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━'
     echo -e "  ${BD}${SEP}${NC}"
     echo ""
 
-    # Separar por categoria
+    # Categorias
     local persistent_items=() memory_items=()
     while IFS='|' read -r cat name display port _; do
         [ -z "$name" ] && continue
@@ -193,63 +359,42 @@ show_main_menu() {
 
     echo -e "  📋 ${BD}Comandos${NC}"
     echo ""
-    echo -e "    [1] Instalar        preparar ambiente ou banco(s)"
-    echo -e "    [2] Gerenciar       atualizar, parar, status, remover"
-    echo -e "    [3] Backups         criar, listar, restaurar"
-    echo -e "    [4] Conectar        psql, mysql, redis-cli, mongosh"
-    echo -e "    [5] Status          ver status de todos os bancos"
-    echo -e "    [0] Sair"
+    echo "    [1] Instalar        preparar ambiente ou banco(s)"
+    echo "    [2] Gerenciar       atualizar, parar, status, remover"
+    echo "    [3] Backups         criar, listar, restaurar"
+    echo "    [4] Conectar        psql, mysql, redis-cli, mongosh"
+    echo "    [5] Status          ver status de todos os bancos"
+    echo "    [0] Sair"
     echo ""
-    read -rp "  Escolha: " choice
-
-    case "$choice" in
-        1) submenu_install ;;
-        2) submenu_manage ;;
-        3)
-            echo ""
-            echo -e "  ${BD}${C}Backups${NC}"
-            echo ""
-            echo "    [1] Criar backup completo"
-            echo "    [2] Criar backup de um banco"
-            echo "    [3] Listar backups"
-            echo "    [4] Restaurar backup"
-            echo "    [0] Voltar"
-            echo ""
-            read -rp "  Escolha: " bk_ch
-            case "$bk_ch" in
-                1)
-                    create_backup "vps" "manual"
-                    while IFS='|' read -r _ bn _; do
-                        [ -n "$bn" ] && db_exists "$bn" && create_backup "$bn" "manual"
-                    done <<< "$DATABASES"
-                    ;;
-                2)
-                    local db
-                    db=$(select_installed_db)
-                    [ -n "$db" ] && create_backup "$db" "manual"
-                    ;;
-                3) list_backups "all" ;;
-                4)
-                    local db
-                    db=$(select_installed_db)
-                    [ -n "$db" ] && restore_backup "$db"
-                    ;;
-            esac
-            pause
-            ;;
-        4) submenu_connect ;;
-        5)
-            while IFS='|' read -r _ name _; do
-                [ -n "$name" ] && db_exists "$name" && status_db "$name"
-            done <<< "$DATABASES"
-            pause
-            ;;
-        0) echo ""; log "Até logo!"; exit 0 ;;
-    esac
 }
 
 interactive_menu() {
     while true; do
         show_main_menu
+        read -rp "  Escolha: " choice
+
+        case "$choice" in
+            1) submenu_install ;;
+            2)
+                local installed_raw
+                installed_raw=$(get_installed_list)
+                if [ -n "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
+                    submenu_manage
+                else
+                    warn "Nenhum banco instalado. Use [1] primeiro."
+                    pause
+                fi
+                ;;
+            3) submenu_backups ;;
+            4) submenu_connect ;;
+            5)
+                while IFS='|' read -r _ name _; do
+                    [ -n "$name" ] && db_exists "$name" && status_db "$name"
+                done <<< "$DATABASES"
+                pause
+                ;;
+            0) echo ""; log "Até mais!"; exit 0 ;;
+            *) warn "Opção inválida: $choice" ;;
+        esac
     done
 }
