@@ -1,18 +1,18 @@
-[submodule "db-postgres"]
-	path = db-postgres
+[submodule "dbs/db-postgres"]
+	path = dbs/db-postgres
 	url = https://github.com/Brazwed/db-postgres.git
-[submodule "db-dragonfly"]
-	path = db-dragonfly
+[submodule "dbs/db-dragonfly"]
+	path = dbs/db-dragonfly
 	url = https://github.com/Brazwed/db-dragonfly.git
-[submodule "db-mysql"]
-	path = db-mysql
+[submodule "dbs/db-mysql"]
+	path = dbs/db-mysql
 	url = https://github.com/Brazwed/db-mysql.git
-[submodule "db-mariadb"]
-	path = db-mariadb
+[submodule "dbs/db-mariadb"]
+	path = dbs/db-mariadb
 	url = https://github.com/Brazwed/db-mariadb.git
-[submodule "db-mongodb"]
-	path = db-mongodb
+[submodule "dbs/db-mongodb"]
+	path = dbs/db-mongodb
 	url = https://github.com/Brazwed/db-mongodb.git
-[submodule "db-valkey"]
-	path = db-valkey
+[submodule "dbs/db-valkey"]
+	path = dbs/db-valkey
 	url = https://github.com/Brazwed/db-valkey.git
