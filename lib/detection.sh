@@ -34,7 +34,8 @@ detect_vps_state() {
 
     echo ""
     echo -e "  ${BD}${C}╔══════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "  ${BD}${C}║                    Detecção VPS                             ║${NC}"
+    echo -e "  ${BD}${C}║                    Detecção VPS                              ║${NC}"
+    echo -e "  ${BD}${C}║                    ${DIM}Database Toolkit v1.0${NC}${BD}${C}                   ║${NC}"
     echo -e "  ${BD}${C}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 

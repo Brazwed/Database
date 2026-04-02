@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 
 # ============================================================
-# Database Toolkit - Setup v1.0
-# Entry point: source módulos e gerencia args/menu
+# Database Toolkit v1.0 - por Brazwed
+# https://github.com/Brazwed/Database
 # ============================================================
 
+VERSION="1.0"
+AUTHOR="Brazwed"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# Flags
+AUTO_YES=false
 
 # Configuração
 GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
@@ -162,11 +167,56 @@ Bancos: $ALL_BANCOS"
 # ============================================================
 
 main() {
+    # Handle flags before root check
+    case "${1:-}" in
+        -v|--version)
+            echo "Database Toolkit v${VERSION} por ${AUTHOR}"
+            echo "https://github.com/Brazwed/Database"
+            exit 0
+            ;;
+        -h|--help)
+            echo "Uso: sudo $0 [ação] [banco] [opções]"
+            echo ""
+            echo "Ações:"
+            echo "  install <db>              instalar banco"
+            echo "  up <db>                   iniciar banco"
+            echo "  down <db>                 parar banco"
+            echo "  restart <db>              reiniciar banco"
+            echo "  update <db>               atualizar banco"
+            echo "  status [db]               ver status"
+            echo "  logs <db>                 acompanhar logs"
+            echo "  shell <db>                shell no container"
+            echo "  remove <db>               remover banco"
+            echo "  detect                    detectar estado da VPS"
+            echo "  backup [db|vps|all]       criar backup"
+            echo "  backups [db]              listar backups"
+            echo "  rollback <db> [timestamp] restaurar backup"
+            echo ""
+            echo "Bancos: $ALL_BANCOS"
+            echo ""
+            echo "Opções:"
+            echo "  -v, --version             mostrar versão"
+            echo "  -h, --help                mostrar ajuda"
+            echo "  -y, --yes                 modo não-interativo (pular confirms)"
+            exit 0
+            ;;
+    esac
+
     [ "$(id -u)" -ne 0 ] && err "Execute como root: sudo $0"
     mkdir -p "$BACKUP_DIR"
 
-    if [ -n "${1:-}" ]; then
-        parse_args "$@"
+    # Parse --yes flag
+    local clean_args=()
+    for arg in "$@"; do
+        if [ "$arg" = "-y" ] || [ "$arg" = "--yes" ]; then
+            AUTO_YES=true
+        else
+            clean_args+=("$arg")
+        fi
+    done
+
+    if [ ${#clean_args[@]} -gt 0 ]; then
+        parse_args "${clean_args[@]}"
         exit 0
     fi
 

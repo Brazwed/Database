@@ -32,16 +32,18 @@ install_db() {
     echo "    Repo:       ${GITHUB_BASE}/${repo}"
     echo ""
 
-    read -rp "  Customizar? (pasta/porta) [y/N] " cust
-    if [[ "$cust" =~ ^[yY]$ ]]; then
-        echo ""
-        read -rp "  Pasta [$dir]: " x; [ -n "$x" ] && dir="$x"
-        read -rp "  Porta [$default_port]: " x; [ -n "$x" ] && port="$x"
-        echo ""
-        echo -e "  ${BD}=== Resumo ===${NC}"
-        echo ""
-        printf "    %-16s → %-30s (porta %s)\n" "$display" "$dir" "$port"
-        echo ""
+    if [ "$AUTO_YES" != "true" ]; then
+        read -rp "  Customizar? (pasta/porta) [y/N] " cust
+        if [[ "$cust" =~ ^[yY]$ ]]; then
+            echo ""
+            read -rp "  Pasta [$dir]: " x; [ -n "$x" ] && dir="$x"
+            read -rp "  Porta [$default_port]: " x; [ -n "$x" ] && port="$x"
+            echo ""
+            echo -e "  ${BD}=== Resumo ===${NC}"
+            echo ""
+            printf "    %-16s → %-30s (porta %s)\n" "$display" "$dir" "$port"
+            echo ""
+        fi
     fi
 
     confirm "Confirmar instalar?" || return 0
@@ -51,6 +53,14 @@ install_db() {
     if ask_firewall_choice; then
         open_port "$port" "$display"
         log "Porta $port liberada"
+    fi
+
+    # Check disk space (need at least 500MB)
+    local avail_kb
+    avail_kb=$(df --output=avail "$dir" 2>/dev/null | tail -1 | tr -d ' ')
+    if [ -n "$avail_kb" ] && [ "$avail_kb" -lt 512000 ] 2>/dev/null; then
+        warn "Pouco espaço em disco ($(( avail_kb / 1024 ))MB livre). Recomendado: 500MB+"
+        confirm "Continuar?" || return 1
     fi
 
     mkdir -p "$dir"
