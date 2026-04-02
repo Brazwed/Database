@@ -17,6 +17,10 @@ spinner() {
     printf "\r  ${G}[✔]${NC} ${msg}... OK!          \n"
 }
 
+flush_stdin() {
+    while read -r -t 0 2>/dev/null; do read -r -t 0.1 2>/dev/null; done
+}
+
 confirm() { read -rp "${1:-Confirmar?} [Y/n] " c; [[ -z "$c" || "$c" =~ ^[yY]$ ]]; }
 pause()   { read -rp "  Pressione Enter..." _; }
 

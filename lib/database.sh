@@ -201,10 +201,10 @@ status_db() {
     local st
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
-        echo -e "  Status: ${G}running${NC}"
+        echo -e "  Status: ${BD}${G}● rodando${NC}"
         show_info "$db"
     else
-        echo -e "  Status: ${R}stopped${NC}"
+        echo -e "  Status: ${BD}${R}● parado${NC}"
     fi
 }
 
@@ -296,7 +296,7 @@ logs_db() {
     db_exists "$db" || { warn "$display não instalado"; return 1; }
 
     info "Logs de $display (Ctrl+C pra sair)..."
-    (cd "$dir" && docker compose logs -f)
+    (cd "$dir" && docker compose logs -f --no-log-prefix)
 }
 
 shell_db() {

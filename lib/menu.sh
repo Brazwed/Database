@@ -63,6 +63,7 @@ submenu_install() {
         echo "    [0] ← Voltar ao menu principal"
         echo ""
 
+        flush_stdin
         read -rp "  Escolha: " choice
         [ "$choice" = "0" ] && return
 
@@ -123,6 +124,7 @@ submenu_manage() {
         echo "    [0] ← Voltar ao menu principal"
         echo ""
 
+        flush_stdin
         read -rp "  Escolha: " action
         [ "$action" = "0" ] && return
         action=$(echo "$action" | tr '[:upper:]' '[:lower:]')
@@ -175,6 +177,7 @@ submenu_backups() {
         echo "    [0] ← Voltar ao menu principal"
         echo ""
 
+        flush_stdin
         read -rp "  Escolha: " choice
 
         case "$choice" in
@@ -190,6 +193,7 @@ submenu_backups() {
                 done <<< "$DATABASES"
                 echo "    [0] Voltar"
                 echo ""
+        flush_stdin
                 read -rp "  Escolha: " ch
                 [ "$ch" = "0" ] && continue
                 if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#db_names[@]}" ] 2>/dev/null; then
@@ -204,6 +208,7 @@ submenu_backups() {
                 echo "    [2] Estado da VPS"
                 echo "    [0] Voltar"
                 echo ""
+        flush_stdin
                 read -rp "  Escolha: " bk_ch
                 case "$bk_ch" in
                     1)
@@ -241,6 +246,7 @@ submenu_backups() {
 
                 echo "    [0] Voltar"
                 echo ""
+        flush_stdin
                 read -rp "  Escolha: " bk_ch
                 [ "$bk_ch" = "0" ] && continue
 
@@ -340,6 +346,7 @@ show_main_menu() {
 interactive_menu() {
     while true; do
         show_main_menu
+        flush_stdin
         read -rp "  Escolha: " choice
 
         case "$choice" in
