@@ -5,7 +5,7 @@ install_db() {
     local display default_port repo container dir port
 
     if ! db_info_valid "$db"; then
-        err "Banco desconhecido: '$db'. Bancos válidos: postgres, dragonfly"
+        err "Banco desconhecido: '$db'. Bancos válidos: postgres, dragonfly, mysql, mariadb"
     fi
 
     display=$(parse_db "$db" 2)
@@ -73,6 +73,8 @@ install_db() {
         case "$db" in
             postgres) sed -i "s/^PG_PORT=.*/PG_PORT=$port/" "$dir/.env" ;;
             dragonfly) sed -i "s/^DF_PORT=.*/DF_PORT=$port/" "$dir/.env" ;;
+            mysql) sed -i "s/^MY_PORT=.*/MY_PORT=$port/" "$dir/.env" ;;
+            mariadb) sed -i "s/^MA_PORT=.*/MA_PORT=$port/" "$dir/.env" ;;
         esac
     fi
 
@@ -230,6 +232,34 @@ show_info() {
         echo "  Pass: $pass"
         echo ""
         echo "  Connect: redis-cli -h localhost -p $port -a $pass"
+    elif [ "$db" = "mysql" ]; then
+        local user="mysql_user" pass="mysql_dev_2026" dbname="devdb"
+        [ -f "$dir/.env" ] && {
+            user=$(grep -m1 "^MY_USER=" "$dir/.env" | cut -d= -f2)
+            pass=$(grep -m1 "^MY_PASS=" "$dir/.env" | cut -d= -f2)
+            dbname=$(grep -m1 "^MY_DB=" "$dir/.env" | cut -d= -f2)
+        }
+        echo "  Host:     localhost"
+        echo "  Port:     $port"
+        echo "  Database: $dbname"
+        echo "  User:     $user"
+        echo "  Pass:     $pass"
+        echo ""
+        echo "  Connect: mysql -h localhost -P $port -u $user -p$pass $dbname"
+    elif [ "$db" = "mariadb" ]; then
+        local user="mariadb_user" pass="mariadb_dev_2026" dbname="devdb"
+        [ -f "$dir/.env" ] && {
+            user=$(grep -m1 "^MA_USER=" "$dir/.env" | cut -d= -f2)
+            pass=$(grep -m1 "^MA_PASS=" "$dir/.env" | cut -d= -f2)
+            dbname=$(grep -m1 "^MA_DB=" "$dir/.env" | cut -d= -f2)
+        }
+        echo "  Host:     localhost"
+        echo "  Port:     $port"
+        echo "  Database: $dbname"
+        echo "  User:     $user"
+        echo "  Pass:     $pass"
+        echo ""
+        echo "  Connect: mysql -h localhost -P $port -u $user -p$pass $dbname"
     fi
 }
 
