@@ -114,6 +114,7 @@ submenu_manage() {
         echo ""
         echo "    [U] Atualizar (git pull + restart/up)"
         echo "    [D] Parar (docker compose down)"
+        echo "    [C] Conectar (psql, mysql, redis-cli...)"
         echo "    [S] Status (detalhes + conexão)"
         echo "    [L] Logs (acompanhar em tempo real)"
         echo "    [B] Backup (criar backup manual)"
@@ -132,6 +133,18 @@ submenu_manage() {
                update_db "$db_name"; pause ;;
             d) db_name=$(select_installed_db "Qual banco parar?") || continue
                stop_db "$db_name"; pause ;;
+            c)
+                local running_names=()
+                for n in "${names[@]}"; do
+                    local st
+                    st=$(get_container_status "$(parse_db "$n" 5)")
+                    [ "$st" = "running" ] && running_names+=("$n")
+                done
+                if [ ${#running_names[@]} -eq 0 ]; then
+                    warn "Nenhum banco rodando"; pause; continue
+                fi
+                db_name=$(select_installed_db "Qual banco conectar?") || continue
+                shell_db "$db_name" ;;
             s)
                 for name in "${names[@]}"; do status_db "$name"; done
                 pause ;;
@@ -146,48 +159,6 @@ submenu_manage() {
             *) warn "Opção inválida" ;;
         esac
     done
-}
-
-submenu_connect() {
-    local installed_raw running_names=()
-    installed_raw=$(get_installed_list)
-
-    while IFS='|' read -r name display port status dir; do
-        [ -z "$name" ] && continue
-        [ "$status" = "running" ] && running_names+=("$name|$display|$port")
-    done <<< "$installed_raw"
-
-    if [ ${#running_names[@]} -eq 0 ]; then
-        warn "Nenhum banco rodando"
-        return 1
-    fi
-
-    echo ""
-    echo -e "  ${BD}${C}← Conectar${NC}"
-    echo ""
-    echo "  Bancos rodando:"
-    echo ""
-
-    local idx=1
-    for item in "${running_names[@]}"; do
-        local name display port
-        IFS='|' read -r name display port <<< "$item"
-        echo "  [$idx] $display (porta $port)"
-        idx=$((idx + 1))
-    done
-
-    echo "  [0] Voltar"
-    echo ""
-    read -rp "  Escolha: " ch
-    [ "$ch" = "0" ] && return
-
-    local sel=${running_names[$((ch - 1))]:-}
-    [ -z "$sel" ] && return
-
-    local n
-    n=$(echo "$sel" | cut -d'|' -f1)
-    info "Conectando ao $(parse_db "$n" 2)..."
-    shell_db "$n"
 }
 
 submenu_backups() {
@@ -362,8 +333,6 @@ show_main_menu() {
     echo "    [1] Instalar        preparar ambiente ou banco(s)"
     echo "    [2] Gerenciar       atualizar, parar, status, remover"
     echo "    [3] Backups         criar, listar, restaurar"
-    echo "    [4] Conectar        psql, mysql, redis-cli, mongosh"
-    echo "    [5] Status          ver status de todos os bancos"
     echo "    [0] Sair"
     echo ""
 }
@@ -386,13 +355,6 @@ interactive_menu() {
                 fi
                 ;;
             3) submenu_backups ;;
-            4) submenu_connect ;;
-            5)
-                while IFS='|' read -r _ name _; do
-                    [ -n "$name" ] && db_exists "$name" && status_db "$name"
-                done <<< "$DATABASES"
-                pause
-                ;;
             0) echo ""; log "Até mais!"; exit 0 ;;
             *) warn "Opção inválida: $choice" ;;
         esac
