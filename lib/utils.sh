@@ -8,6 +8,15 @@ warn() { echo -e "${Y}[!]${NC} $1"; }
 err()  { echo -e "${R}[✘]${NC} $1"; exit 1; }
 info() { echo -e "${B}[●]${NC} $1"; }
 
+spinner() {
+    local msg="$1" chars='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+    for i in $(seq 1 8); do
+        printf "\r  ${B}[●]${NC} ${chars:$((i % ${#chars})):1} ${msg}..."
+        sleep 0.08
+    done
+    printf "\r  ${G}[✔]${NC} ${msg}... OK!          \n"
+}
+
 confirm() { read -rp "${1:-Confirmar?} [Y/n] " c; [[ -z "$c" || "$c" =~ ^[yY]$ ]]; }
 pause()   { read -rp "  Pressione Enter..." _; }
 

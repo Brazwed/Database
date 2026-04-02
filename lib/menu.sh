@@ -303,10 +303,10 @@ show_main_menu() {
     for item in "${persistent_items[@]}"; do
         local name display port st
         IFS='|' read -r name display port st <<< "$item"
-        local color="${Y}" tag="não instalado"
+        local color="${BD}${Y}" tag="não instalado"
         case "$st" in
-            running) color="${G}"; tag="rodando" ;;
-            stopped) color="${R}"; tag="parado" ;;
+            running) color="${BD}${G}"; tag="rodando" ;;
+            stopped) color="${BD}${R}"; tag="parado" ;;
         esac
         echo -e "    ${display}   :${port}   ${color}● ${tag}${NC}"
     done
@@ -316,10 +316,10 @@ show_main_menu() {
     for item in "${memory_items[@]}"; do
         local name display port st
         IFS='|' read -r name display port st <<< "$item"
-        local color="${Y}" tag="não instalado"
+        local color="${BD}${Y}" tag="não instalado"
         case "$st" in
-            running) color="${G}"; tag="rodando" ;;
-            stopped) color="${R}"; tag="parado" ;;
+            running) color="${BD}${G}"; tag="rodando" ;;
+            stopped) color="${BD}${R}"; tag="parado" ;;
         esac
         echo -e "    ${display}   :${port}   ${color}● ${tag}${NC}"
     done

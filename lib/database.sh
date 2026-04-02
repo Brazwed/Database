@@ -56,10 +56,10 @@ install_db() {
     mkdir -p "$dir"
 
     if [ -d "$dir/.git" ]; then
-        info "Repo existe, atualizando..."
+        spinner "Atualizando $display"
         (cd "$dir" && git pull --quiet) || true
     else
-        info "Baixando $display..."
+        spinner "Baixando $display"
         if ! git clone "${GITHUB_BASE}/${repo}.git" "$dir" 2>&1; then
             err "Falha ao clonar ${GITHUB_BASE}/${repo}.git"
         fi
@@ -86,7 +86,7 @@ install_db() {
         err "Docker não instalado. Execute: $0 install docker"
     fi
 
-    info "Subindo $display..."
+    spinner "Subindo $display"
     (cd "$dir" && docker compose up -d 2>&1)
     sleep 3
 
@@ -115,7 +115,7 @@ start_db() {
         return 1
     fi
 
-    info "Iniciando $display..."
+    spinner "Iniciando $display"
     (cd "$dir" && docker compose up -d 2>&1)
     sleep 2
 
@@ -134,7 +134,7 @@ stop_db() {
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
     db_exists "$db" || { warn "$display não instalado"; return 1; }
 
-    info "Parando $display..."
+    spinner "Parando $display"
     (cd "$dir" && docker compose down --timeout 10 2>&1)
     log "$display parado!"
 }
@@ -149,15 +149,17 @@ update_db() {
 
     create_backup "$db" "before-update"
 
-    info "Atualizando $display..."
+    spinner "Atualizando $display"
     if ! (cd "$dir" && git pull --quiet 2>&1); then
         warn "Git pull falhou. Continuando com código atual..."
     fi
 
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
+        spinner "Reiniciando container"
         (cd "$dir" && docker compose restart 2>&1)
     else
+        spinner "Iniciando container"
         (cd "$dir" && docker compose up -d 2>&1)
     fi
 
@@ -175,6 +177,7 @@ remove_db() {
 
     create_backup "$db" "before-remove"
 
+    spinner "Removendo $display"
     (cd "$dir" && docker compose down -v --timeout 10 2>&1)
     rm -rf "$dir"
     log "$display removido!"
