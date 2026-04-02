@@ -1,28 +1,28 @@
 # Database Toolkit v1.0
 
-Docker containers pré-configurados para bancos de dados. Um único script pra tudo.
+Docker containers pre-configured for databases. One script for everything.
 
 Multi-language: English 🇺🇸 | Português 🇧🇷
 
-## Bancos disponíveis
+## Databases Available
 
-### Persistentes (disco)
+### Persistent (disk)
 
-| Banco | Porta | Repo |
-|-------|-------|------|
+| Database | Port | Repo |
+|----------|------|------|
 | PostgreSQL 16 | 5432 | [db-postgres](https://github.com/Brazwed/db-postgres) |
 | MySQL 8 | 3306 | [db-mysql](https://github.com/Brazwed/db-mysql) |
 | MariaDB 11 | 3307 | [db-mariadb](https://github.com/Brazwed/db-mariadb) |
 | MongoDB 7 | 27017 | [db-mongodb](https://github.com/Brazwed/db-mongodb) |
 
-### Cache em memória (RAM)
+### In-Memory Cache (RAM)
 
-| Banco | Porta | Repo |
-|-------|-------|------|
+| Database | Port | Repo |
+|----------|------|------|
 | DragonflyDB | 6379 | [db-dragonfly](https://github.com/Brazwed/db-dragonfly) |
 | Valkey 8 | 6380 | [db-valkey](https://github.com/Brazwed/db-valkey) |
 
-## Instalação rápida
+## Quick Start
 
 ```bash
 git clone --recurse-submodules https://github.com/Brazwed/Database.git
@@ -30,63 +30,63 @@ cd Database
 sudo ./setup.sh
 ```
 
-## Comandos
+## Commands
 
-### Menu interativo
+### Interactive Menu
 
 ```bash
 sudo ./setup.sh
 ```
 
-### Args diretos
+### Direct Args
 
 ```bash
-# Instalar
-sudo ./setup.sh install docker              # instalar Docker
-sudo ./setup.sh install postgres            # instalar PostgreSQL
-sudo ./setup.sh install postgres mysql      # instalar vários
-sudo ./setup.sh install postgres --yes      # sem confirmações
+# Install
+sudo ./setup.sh install docker              # install Docker
+sudo ./setup.sh install postgres            # install PostgreSQL
+sudo ./setup.sh install postgres mysql      # install multiple
+sudo ./setup.sh install postgres --yes      # non-interactive (skip confirms)
 
-# Gerenciar
-sudo ./setup.sh up postgres                 # iniciar
-sudo ./setup.sh down postgres               # parar
-sudo ./setup.sh restart postgres            # reiniciar
+# Manage
+sudo ./setup.sh up postgres                 # start
+sudo ./setup.sh down postgres               # stop
+sudo ./setup.sh restart postgres            # restart
 sudo ./setup.sh update postgres             # git pull + up/restart
-sudo ./setup.sh status                      # status de todos
-sudo ./setup.sh status postgres             # status de 1
-sudo ./setup.sh logs postgres               # logs em tempo real
-sudo ./setup.sh shell postgres              # shell no container
-sudo ./setup.sh psql                        # atalho: psql postgres
-sudo ./setup.sh mysql                       # atalho: mysql
-sudo ./setup.sh mariadb                     # atalho: mariadb
-sudo ./setup.sh mongo                       # atalho: mongosh
-sudo ./setup.sh valkey                      # atalho: valkey-cli
-sudo ./setup.sh remove postgres             # remover banco
+sudo ./setup.sh status                      # status of all
+sudo ./setup.sh status postgres             # status of 1
+sudo ./setup.sh logs postgres               # live logs
+sudo ./setup.sh shell postgres              # shell in container
+sudo ./setup.sh psql                        # shortcut: psql postgres
+sudo ./setup.sh mysql                       # shortcut: mysql
+sudo ./setup.sh mariadb                     # shortcut: mariadb
+sudo ./setup.sh mongo                       # shortcut: mongosh
+sudo ./setup.sh valkey                      # shortcut: valkey-cli
+sudo ./setup.sh remove postgres             # remove database
 
 # Backups
-sudo ./setup.sh backup                      # backup de tudo
-sudo ./setup.sh backup postgres             # backup de 1
-sudo ./setup.sh backups                     # listar backups
-sudo ./setup.sh rollback postgres           # restaurar mais recente
-sudo ./setup.sh rollback postgres 2026-03-31_15-00-00  # restaurar específico
+sudo ./setup.sh backup                      # backup everything
+sudo ./setup.sh backup postgres             # backup 1 database
+sudo ./setup.sh backups                     # list all backups
+sudo ./setup.sh rollback postgres           # restore latest
+sudo ./setup.sh rollback postgres 2026-03-31_15-00-00  # restore specific
 
-# Utilidades
-sudo ./setup.sh detect                      # detectar estado da VPS
-sudo ./setup.sh lang pt                     # trocar idioma (pt/en)
-sudo ./setup.sh --version                   # mostrar versão
-sudo ./setup.sh --help                      # mostrar ajuda
+# Utilities
+sudo ./setup.sh detect                      # detect VPS state
+sudo ./setup.sh lang pt                     # change language (pt/en)
+sudo ./setup.sh --version                   # show version
+sudo ./setup.sh --help                      # show help
 ```
 
-## Conexão padrão
+## Default Connection
 
 ### PostgreSQL 16
 
 ```
 Host:     localhost
-Porta:    5432
-Usuário:  postgres
-Senha:    postgres_dev_2026
-Banco:    devdb
+Port:     5432
+User:     postgres
+Pass:     postgres_dev_2026
+Database: devdb
 
 psql -h localhost -p 5432 -U postgres -d devdb
 ```
@@ -95,10 +95,10 @@ psql -h localhost -p 5432 -U postgres -d devdb
 
 ```
 Host:     localhost
-Porta:    3306
-Usuário:  mysql_user
-Senha:    mysql_dev_2026
-Banco:    devdb
+Port:     3306
+User:     mysql_user
+Pass:     mysql_dev_2026
+Database: devdb
 
 mysql -h localhost -P 3306 -u mysql_user -pmysql_dev_2026 devdb
 ```
@@ -107,10 +107,10 @@ mysql -h localhost -P 3306 -u mysql_user -pmysql_dev_2026 devdb
 
 ```
 Host:     localhost
-Porta:    3307
-Usuário:  mariadb_user
-Senha:    mariadb_dev_2026
-Banco:    devdb
+Port:     3307
+User:     mariadb_user
+Pass:     mariadb_dev_2026
+Database: devdb
 
 mysql -h localhost -P 3307 -u mariadb_user -pmariadb_dev_2026 devdb
 ```
@@ -119,9 +119,9 @@ mysql -h localhost -P 3307 -u mariadb_user -pmariadb_dev_2026 devdb
 
 ```
 Host:     localhost
-Porta:    27017
-Usuário:  mongodb_user
-Senha:    mongodb_dev_2026
+Port:     27017
+User:     mongodb_user
+Pass:     mongodb_dev_2026
 
 mongosh mongodb://mongodb_user:mongodb_dev_2026@localhost:27017/devdb
 ```
@@ -130,8 +130,8 @@ mongosh mongodb://mongodb_user:mongodb_dev_2026@localhost:27017/devdb
 
 ```
 Host:     localhost
-Porta:    6379
-Senha:    dragonfly_dev_2026
+Port:     6379
+Pass:     dragonfly_dev_2026
 
 redis-cli -h localhost -p 6379 -a dragonfly_dev_2026
 ```
@@ -140,30 +140,30 @@ redis-cli -h localhost -p 6379 -a dragonfly_dev_2026
 
 ```
 Host:     localhost
-Porta:    6380
-Senha:    valkey_dev_2026
+Port:     6380
+Pass:     valkey_dev_2026
 
 redis-cli -h localhost -p 6380 -a valkey_dev_2026
 ```
 
-## Estrutura
+## Structure
 
 ```
 Database/
-├── setup.sh               ← ÚNICO ponto de entrada
+├── setup.sh               ← Main entry point
 ├── README.md
 │
 ├── lib/
-│   ├── utils.sh           ← helpers, cores, logging, spinner
-│   ├── menu.sh            ← menu interativo
-│   ├── database.sh        ← operações de banco
-│   ├── detection.sh       ← detecção de VPS
-│   ├── backup.sh          ← sistema de backup
-│   ├── firewall.sh        ← gerenciamento de firewall
-│   ├── docker.sh          ← instalação do Docker
+│   ├── utils.sh           ← helpers, colors, logging, spinner
+│   ├── menu.sh            ← interactive menu
+│   ├── database.sh        ← database operations
+│   ├── detection.sh       ← VPS detection
+│   ├── backup.sh          ← backup system
+│   ├── firewall.sh        ← firewall management
+│   ├── docker.sh          ← Docker installation
 │   └── lang/
-│       ├── en_US.sh       ← inglês (default)
-│       └── pt_BR.sh       ← português
+│       ├── en_US.sh       ← English (default)
+│       └── pt_BR.sh       ← Portuguese
 │
 └── dbs/
     ├── db-postgres/       ← PostgreSQL 16
@@ -174,36 +174,36 @@ Database/
     └── db-valkey/         ← Valkey 8
 ```
 
-## Adicionar novo banco
+## Add a New Database
 
-1. Criar repo no GitHub (ex: `db-redis`)
-2. Criar subpasta: `dbs/db-redis/`
-3. Criar: `docker-compose.yml`, `.env.example`, `README.md`
-4. Adicionar na variável `DATABASES` do `setup.sh`
-5. Adicionar case no `show_info` em `lib/database.sh`
-6. Adicionar strings de tradução em `lib/lang/en_US.sh` e `lib/lang/pt_BR.sh`
+1. Create a GitHub repo (e.g. `db-redis`)
+2. Create subfolder: `dbs/db-redis/`
+3. Create: `docker-compose.yml`, `.env.example`, `README.md`
+4. Add to `DATABASES` variable in `setup.sh`
+5. Add case in `show_info` in `lib/database.sh`
+6. Add translation strings in `lib/lang/en_US.sh` and `lib/lang/pt_BR.sh`
 
-## Idioma
+## Language
 
-O idioma é detectado automaticamente do sistema. Para trocar:
+Language is auto-detected from the system. To change:
 
 ```bash
-sudo ./setup.sh lang pt     # português
-sudo ./setup.sh lang en     # inglês
+sudo ./setup.sh lang pt     # Portuguese
+sudo ./setup.sh lang en     # English
 ```
 
-Salva em `~/.db-toolkit/lang`. O idioma muda no próximo uso do menu.
+Saves to `~/.db-toolkit/lang`. Language changes on next menu use.
 
-## Recursos
+## Features
 
-- Spinner animado durante ações
-- Status com cores (● verde rodando, ● vermelho parado, ● amarelo não instalado)
-- Sistema de backup automático antes de cada ação destrutiva
-- Detecção de VPS (Docker, portas, firewall)
-- Flush de stdin (Enter/tecla antes do menu não causa bugs)
-- Modo não-interativo (`--yes`) pra scripts e CI
-- Multi-language (English + Português)
+- Animated spinner during actions
+- Colored status (green ● running, red ● stopped, yellow ● not installed)
+- Automatic backup before every destructive action
+- VPS detection (Docker, ports, firewall)
+- Stdin flush (Enter/keystroke before menu doesn't cause bugs)
+- Non-interactive mode (`--yes`) for scripts and CI
+- Multi-language (English + Portuguese)
 
-## Por Brazwed
+## By Brazwed
 
 https://github.com/Brazwed/Database
