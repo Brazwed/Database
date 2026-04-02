@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # ============================================================
-# Database Toolkit - Setup
+# Database Toolkit - Setup v1.0
 # Entry point: source módulos e gerencia args/menu
 # ============================================================
 
@@ -11,15 +11,19 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
 BACKUP_DIR="${HOME}/.db-toolkit/backups"
 
-DATABASES="postgres|PostgreSQL 16|5432|db-postgres|postgres|/opt/db-postgres
-dragonfly|DragonflyDB|6379|db-dragonfly|dragonfly|/opt/db-dragonfly
-mysql|MySQL 8|3306|db-mysql|mysql|/opt/db-mysql
-mariadb|MariaDB 11|3307|db-mariadb|mariadb|/opt/db-mariadb"
+DATABASES="persistent|postgres|PostgreSQL 16|5432|db-postgres|postgres|/opt/db-postgres
+persistent|mysql|MySQL 8|3306|db-mysql|mysql|/opt/db-mysql
+persistent|mariadb|MariaDB 11|3307|db-mariadb|mariadb|/opt/db-mariadb
+persistent|mongodb|MongoDB 7|27017|db-mongodb|mongodb|/opt/db-mongodb
+memory|dragonfly|DragonflyDB|6379|db-dragonfly|dragonfly|/opt/db-dragonfly
+memory|valkey|Valkey 8|6380|db-valkey|valkey|/opt/db-valkey"
 
 FW_TYPE="none"
 FW_ACTIVE=false
 
-# Carrega módulos (ordem importa: utils primeiro)
+ALL_BANCOS="postgres, dragonfly, mysql, mariadb, mongodb, valkey"
+
+# Load modules (order matters: utils first)
 for lib in "$SCRIPT_DIR"/lib/*.sh; do
     source "$lib"
 done
@@ -36,35 +40,35 @@ parse_args() {
     case "$action" in
         install)
             if [ -z "$args" ]; then
-                err "Uso: $0 install <docker|postgres|dragonfly|mysql|mariadb>"
+                err "Uso: $0 install <docker|$ALL_BANCOS>"
             fi
             for arg in $args; do
                 case "$arg" in
                     docker) install_docker ;;
-                    postgres|dragonfly|mysql|mariadb) install_db "$arg" ;;
+                    postgres|dragonfly|mysql|mariadb|mongodb|valkey) install_db "$arg" ;;
                     *) warn "Banco desconhecido: $arg" ;;
                 esac
             done
             ;;
         up)
-            [ -z "$args" ] && err "Uso: $0 up <postgres|dragonfly|mysql|mariadb>"
+            [ -z "$args" ] && err "Uso: $0 up <$ALL_BANCOS>"
             for db in $args; do start_db "$db"; done
             ;;
         down)
-            [ -z "$args" ] && err "Uso: $0 down <postgres|dragonfly|mysql|mariadb>"
+            [ -z "$args" ] && err "Uso: $0 down <$ALL_BANCOS>"
             for db in $args; do stop_db "$db"; done
             ;;
         restart)
-            [ -z "$args" ] && err "Uso: $0 restart <postgres|dragonfly|mysql|mariadb>"
+            [ -z "$args" ] && err "Uso: $0 restart <$ALL_BANCOS>"
             for db in $args; do restart_db "$db"; done
             ;;
         update)
-            [ -z "$args" ] && err "Uso: $0 update <postgres|dragonfly|mysql|mariadb>"
+            [ -z "$args" ] && err "Uso: $0 update <$ALL_BANCOS>"
             for db in $args; do update_db "$db"; done
             ;;
         status)
             if [ -z "$args" ]; then
-                while IFS='|' read -r name _; do
+                while IFS='|' read -r _ name _; do
                     [ -n "$name" ] && db_exists "$name" && status_db "$name"
                 done <<< "$DATABASES"
             else
@@ -72,11 +76,11 @@ parse_args() {
             fi
             ;;
         logs)
-            [ -z "$args" ] && err "Uso: $0 logs <postgres|dragonfly|mysql|mariadb>"
+            [ -z "$args" ] && err "Uso: $0 logs <$ALL_BANCOS>"
             logs_db "$args"
             ;;
         shell)
-            [ -z "$args" ] && err "Uso: $0 shell <postgres|dragonfly|mysql|mariadb>"
+            [ -z "$args" ] && err "Uso: $0 shell <$ALL_BANCOS>"
             shell_db "$args"
             ;;
         psql)
@@ -88,8 +92,14 @@ parse_args() {
         mariadb)
             shell_db "mariadb"
             ;;
+        mongo)
+            shell_db "mongodb"
+            ;;
+        valkey)
+            shell_db "valkey"
+            ;;
         remove)
-            [ -z "$args" ] && err "Uso: $0 remove <postgres|dragonfly|mysql|mariadb>"
+            [ -z "$args" ] && err "Uso: $0 remove <$ALL_BANCOS>"
             for db in $args; do remove_db "$db"; done
             ;;
         detect)
@@ -98,7 +108,7 @@ parse_args() {
         backup)
             if [ -z "$args" ] || [ "$args" = "all" ]; then
                 create_backup "vps" "manual"
-                while IFS='|' read -r bn _; do
+                while IFS='|' read -r _ bn _; do
                     [ -n "$bn" ] && db_exists "$bn" && create_backup "$bn" "manual"
                 done <<< "$DATABASES"
             elif [ "$args" = "vps" ]; then
@@ -131,15 +141,18 @@ parse_args() {
   $0 status [db]               ver status
   $0 logs <db>                 acompanhar logs
   $0 shell <db>                shell no container
-  $0 psql                      shell psql
+  $0 psql                      shell postgres
   $0 mysql                     shell mysql
+  $0 mariadb                   shell mariadb
+  $0 mongo                     shell mongodb
+  $0 valkey                    shell valkey
   $0 remove <db>               remover banco
   $0 detect                    detectar estado da VPS
   $0 backup [db|vps|all]       criar backup
   $0 backups [db]              listar backups
   $0 rollback <db> [timestamp] restaurar backup
 
-Bancos: postgres, dragonfly, mysql, mariadb"
+Bancos: $ALL_BANCOS"
             ;;
     esac
 }

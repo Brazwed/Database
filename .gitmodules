@@ -10,3 +10,9 @@
 [submodule "db-mariadb"]
 	path = db-mariadb
 	url = https://github.com/Brazwed/db-mariadb.git
+[submodule "db-mongodb"]
+	path = db-mongodb
+	url = https://github.com/Brazwed/db-mongodb.git
+[submodule "db-valkey"]
+	path = db-valkey
+	url = https://github.com/Brazwed/db-valkey.git

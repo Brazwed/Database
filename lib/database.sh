@@ -5,7 +5,7 @@ install_db() {
     local display default_port repo container dir port
 
     if ! db_info_valid "$db"; then
-        err "Banco desconhecido: '$db'. Bancos válidos: postgres, dragonfly, mysql, mariadb"
+        err "Banco desconhecido: '$db'. Bancos válidos: postgres, dragonfly, mysql, mariadb, mongodb, valkey"
     fi
 
     display=$(parse_db "$db" 2)
@@ -75,6 +75,8 @@ install_db() {
             dragonfly) sed -i "s/^DF_PORT=.*/DF_PORT=$port/" "$dir/.env" ;;
             mysql) sed -i "s/^MY_PORT=.*/MY_PORT=$port/" "$dir/.env" ;;
             mariadb) sed -i "s/^MA_PORT=.*/MA_PORT=$port/" "$dir/.env" ;;
+            mongodb) sed -i "s/^MO_PORT=.*/MO_PORT=$port/" "$dir/.env" ;;
+            valkey) sed -i "s/^VK_PORT=.*/VK_PORT=$port/" "$dir/.env" ;;
         esac
     fi
 
@@ -260,6 +262,28 @@ show_info() {
         echo "  Pass:     $pass"
         echo ""
         echo "  Connect: mysql -h localhost -P $port -u $user -p$pass $dbname"
+    elif [ "$db" = "mongodb" ]; then
+        local user="mongodb_user" pass="mongodb_dev_2026" dbname="devdb"
+        [ -f "$dir/.env" ] && {
+            user=$(grep -m1 "^MO_USER=" "$dir/.env" | cut -d= -f2)
+            pass=$(grep -m1 "^MO_PASS=" "$dir/.env" | cut -d= -f2)
+            dbname=$(grep -m1 "^MO_DB=" "$dir/.env" | cut -d= -f2)
+        }
+        echo "  Host:     localhost"
+        echo "  Port:     $port"
+        echo "  Database: $dbname"
+        echo "  User:     $user"
+        echo "  Pass:     $pass"
+        echo ""
+        echo "  Connect: mongosh mongodb://$user:$pass@localhost:$port/$dbname"
+    elif [ "$db" = "valkey" ]; then
+        local pass="valkey_dev_2026"
+        [ -f "$dir/.env" ] && pass=$(grep -m1 "^VK_PASS=" "$dir/.env" | cut -d= -f2)
+        echo "  Host: localhost"
+        echo "  Port: $port"
+        echo "  Pass: $pass"
+        echo ""
+        echo "  Connect: redis-cli -h localhost -p $port -a $pass"
     fi
 }
 

@@ -51,7 +51,7 @@ detect_vps_state() {
     fi
 
     # Portas e diretórios
-    while IFS='|' read -r db_name _ db_port _ _ db_dir; do
+    while IFS='|' read -r _cat db_name _ db_port _ _ db_dir; do
         [ -z "$db_name" ] && continue
 
         local pid

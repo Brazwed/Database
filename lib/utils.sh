@@ -20,8 +20,8 @@ get_container_status() {
 parse_db() {
     local db="$1" field="$2"
     [ -z "$db" ] && return 1
-    local _name _display _port _repo _container _dir
-    while IFS='|' read -r _name _display _port _repo _container _dir; do
+    local _cat _name _display _port _repo _container _dir
+    while IFS='|' read -r _cat _name _display _port _repo _container _dir; do
         [ -z "$_name" ] && continue
         if [ "$_name" = "$db" ]; then
             case "$field" in
@@ -31,6 +31,7 @@ parse_db() {
                 4) echo "$_repo" ;;
                 5) echo "$_container" ;;
                 6) echo "$_dir" ;;
+                cat) echo "$_cat" ;;
             esac
             return 0
         fi
@@ -52,7 +53,7 @@ db_exists() {
 
 get_installed_list() {
     local result=""
-    while IFS='|' read -r name display port repo container dir; do
+    while IFS='|' read -r cat name display port repo container dir; do
         [ -z "$name" ] && continue
         if [ -d "$dir" ] && [ -f "$dir/docker-compose.yml" ]; then
             local st
