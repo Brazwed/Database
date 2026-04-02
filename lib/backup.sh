@@ -12,7 +12,7 @@ create_backup() {
         local bk_dir="${BACKUP_DIR}/vps/${timestamp}"
         mkdir -p "$bk_dir"
 
-        info "Backup do estado da VPS..."
+        spinner "Backup VPS"
 
         if [ "$FW_TYPE" = "ufw" ]; then
             ufw status numbered > "$bk_dir/ufw.rules" 2>/dev/null || true
@@ -56,7 +56,7 @@ EOF
         local bk_dir="${BACKUP_DIR}/${target}/${timestamp}"
         mkdir -p "$bk_dir"
 
-        info "Backup de $display..."
+        spinner "Backup de $display"
 
         [ -f "$dir/.env" ] && cp "$dir/.env" "$bk_dir/"
         [ -f "$dir/docker-compose.yml" ] && cp "$dir/docker-compose.yml" "$bk_dir/"
@@ -198,8 +198,9 @@ restore_backup() {
         container=$(parse_db "$target" 5)
         local st
         st=$(get_container_status "$container")
-        [ "$st" = "running" ] && (cd "$dir" && docker compose down --timeout 10 2>&1)
+        [ "$st" = "running" ] && spinner "Parando $display" && (cd "$dir" && docker compose down --timeout 10 2>&1)
 
+        spinner "Restaurando $display"
         [ -f "$bk_path/.env" ] && cp "$bk_path/.env" "$dir/"
         [ -f "$bk_path/docker-compose.yml" ] && cp "$bk_path/docker-compose.yml" "$dir/"
         if [ -d "$bk_path/data" ]; then
