@@ -5,7 +5,7 @@ install_db() {
     local display default_port repo container dir port
 
     if ! db_info_valid "$db"; then
-        err "Banco desconhecido: '$db'. Bancos válidos: postgres, dragonfly, mysql, mariadb, mongodb, valkey"
+        err "${ERR_UNKNOWN_DB/\$db/$db}"
     fi
 
     display=$(parse_db "$db" 2)
@@ -19,59 +19,59 @@ install_db() {
     detect_vps_state
     local vps_ok=$?
     if [ $vps_ok -ne 0 ]; then
-        warn "Conflitos detectados"
-        confirm "Continuar mesmo assim?" || return 0
+        warn "${ERR_PORT_CONFLICT}"
+        confirm "${PROMPT_CONTINUE}" || return 0
     fi
 
     echo ""
     echo -e "  ${BD}${C}=== $display ===${NC}"
     echo ""
-    echo "    Imagem:     $display"
-    echo "    Porta:      $default_port"
-    echo "    Pasta:      $dir"
+    echo "    ${MSG_INST_IMAGE}     $display"
+    echo "    ${MSG_INFO_PORT}      $default_port"
+    echo "    ${MSG_INFO_CUSTOM_PORT}      $dir"
     echo "    Repo:       ${GITHUB_BASE}/${repo}"
     echo ""
 
     if [ "$AUTO_YES" != "true" ]; then
-        read -rp "  Customizar? (pasta/porta) [y/N] " cust
+        read -rp "  ${MSG_INST_CUSTOMIZE}" cust
         if [[ "$cust" =~ ^[yY]$ ]]; then
             echo ""
-            read -rp "  Pasta [$dir]: " x; [ -n "$x" ] && dir="$x"
-            read -rp "  Porta [$default_port]: " x; [ -n "$x" ] && port="$x"
+            read -rp "  ${PROMPT_FOLDER}" x; [ -n "$x" ] && dir="$x"
+            read -rp "  ${PROMPT_PORT}" x; [ -n "$x" ] && port="$x"
             echo ""
             echo -e "  ${BD}=== Resumo ===${NC}"
             echo ""
-            printf "    %-16s → %-30s (porta %s)\n" "$display" "$dir" "$port"
+            printf "    %-16s → %-30s (port %s)\n" "$display" "$dir" "$port"
             echo ""
         fi
     fi
 
-    confirm "Confirmar instalar?" || return 0
+    confirm "${PROMPT_CONFIRM}" || return 0
 
     create_backup "vps" "before-install-${db}"
 
     if ask_firewall_choice; then
         open_port "$port" "$display"
-        log "Porta $port liberada"
+        log "${LOG_PORT_OPENED}"
     fi
 
     # Check disk space (need at least 500MB)
     local avail_kb
     avail_kb=$(df --output=avail "$dir" 2>/dev/null | tail -1 | tr -d ' ')
     if [ -n "$avail_kb" ] && [ "$avail_kb" -lt 512000 ] 2>/dev/null; then
-        warn "Pouco espaço em disco ($(( avail_kb / 1024 ))MB livre). Recomendado: 500MB+"
-        confirm "Continuar?" || return 1
+        warn "${ERR_DISK_SPACE} ($(( avail_kb / 1024 ))MB livre). Recomendado: 500MB+"
+        confirm "${PROMPT_CONFIRM}" || return 1
     fi
 
     mkdir -p "$dir"
 
     if [ -d "$dir/.git" ]; then
-        spinner "Atualizando $display"
+        spinner "${MSG_LOG_UPDATING} $display"
         (cd "$dir" && git pull --quiet) || true
     else
-        spinner "Baixando $display"
+        spinner "${MSG_LOG_DOWNLOADING} $display"
         if ! git clone "${GITHUB_BASE}/${repo}.git" "$dir" 2>&1; then
-            err "Falha ao clonar ${GITHUB_BASE}/${repo}.git"
+            err "${ERR_CLONE_FAIL} ${GITHUB_BASE}/${repo}.git"
         fi
     fi
 
@@ -93,19 +93,19 @@ install_db() {
     chmod +x "$dir"/*.sh 2>/dev/null || true
 
     if ! has_docker; then
-        err "Docker não instalado. Execute: $0 install docker"
+        err "${ERR_DOCKER_NOT_INSTALLED}. Execute: $0 install docker"
     fi
 
-    spinner "Subindo $display"
+    spinner "${MSG_LOG_STARTING} $display"
     (cd "$dir" && docker compose up -d 2>&1)
     sleep 3
 
     local st
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
-        log "$display rodando na porta $port"
+        log "$display ${MSG_LOG_STARTING} $port"
     else
-        warn "$display pode não ter iniciado. Verifique: $0 logs $db"
+        warn "$display ${ERR_WONT_START}. Verifique: $0 logs $db"
     fi
 
     show_info "$db"
@@ -114,39 +114,39 @@ install_db() {
 start_db() {
     local db="$1"
     if ! db_info_valid "$db"; then
-        warn "Banco desconhecido: '$db'"
+        warn "${ERR_UNKNOWN_DB_SHORT}"
         return 1
     fi
     local dir display container
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
 
     if ! db_exists "$db"; then
-        warn "$display não instalado. Instale: $0 install $db"
+        warn "$display ${ERR_NOT_INSTALLED}. Instale: $0 install $db"
         return 1
     fi
 
-    spinner "Iniciando $display"
+    spinner "${MSG_LOG_STARTING} $display"
     (cd "$dir" && docker compose up -d 2>&1)
     sleep 2
 
     local st
     st=$(get_container_status "$container")
-    [ "$st" = "running" ] && log "$display rodando" || warn "$display pode não ter iniciado"
+    [ "$st" = "running" ] && log "${LOG_STARTED}" || warn "$display ${ERR_WONT_START}"
 }
 
 stop_db() {
     local db="$1"
     if ! db_info_valid "$db"; then
-        warn "Banco desconhecido: '$db'"
+        warn "${ERR_UNKNOWN_DB_SHORT}"
         return 1
     fi
     local dir display
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
-    db_exists "$db" || { warn "$display não instalado"; return 1; }
+    db_exists "$db" || { warn "$display ${ERR_NOT_INSTALLED}"; return 1; }
 
-    spinner "Parando $display"
+    spinner "${MSG_LOG_STOPPING} $display"
     (cd "$dir" && docker compose down --timeout 10 2>&1)
-    log "$display parado!"
+    log "$display ${MSG_STATUS_STOPPED}"
 }
 
 restart_db() { stop_db "$1"; start_db "$1"; }
@@ -155,48 +155,48 @@ update_db() {
     local db="$1"
     local dir display container st
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
-    db_exists "$db" || { warn "$display não instalado"; return 1; }
+    db_exists "$db" || { warn "$display ${ERR_NOT_INSTALLED}"; return 1; }
 
     create_backup "$db" "before-update"
 
-    spinner "Atualizando $display"
+    spinner "${MSG_LOG_UPDATING} $display"
     if ! (cd "$dir" && git pull --quiet 2>&1); then
-        warn "Git pull falhou. Continuando com código atual..."
+        warn "${ERR_GIT_PULL_FAIL}. Continuando com código atual..."
     fi
 
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
-        spinner "Reiniciando container"
+        spinner "${MSG_LOG_RESTARTING}"
         (cd "$dir" && docker compose restart 2>&1)
     else
-        spinner "Iniciando container"
+        spinner "${MSG_LOG_STARTING} container"
         (cd "$dir" && docker compose up -d 2>&1)
     fi
 
-    log "$display atualizado!"
+    log "$display ${LOG_UPDATED}"
 }
 
 remove_db() {
     local db="$1"
     local dir display container
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
-    db_exists "$db" || { warn "$display não instalado"; return 1; }
+    db_exists "$db" || { warn "$display ${ERR_NOT_INSTALLED}"; return 1; }
 
-    warn "PARAR e REMOVER $display completamente"
-    confirm "Certeza?" || return 0
+    warn "${ERR_PARAR_REMOVER}"
+    confirm "${PROMPT_ARE_YOU_SURE}" || return 0
 
     create_backup "$db" "before-remove"
 
-    spinner "Removendo $display"
+    spinner "${MSG_LOG_REMOVING} $display"
     (cd "$dir" && docker compose down -v --timeout 10 2>&1)
     rm -rf "$dir"
-    log "$display removido!"
+    log "$display ${LOG_REMOVED}"
 }
 
 status_db() {
     local db="$1"
     if ! db_info_valid "$db"; then
-        warn "Banco desconhecido: '$db'"
+        warn "${ERR_UNKNOWN_DB_SHORT}"
         return 1
     fi
     local dir display port container
@@ -211,10 +211,10 @@ status_db() {
     local st
     st=$(get_container_status "$container")
     if [ "$st" = "running" ]; then
-        echo -e "  Status: ${BD}${G}● rodando${NC}"
+        echo -e "  Status: ${BD}${G}● ${MSG_STATUS_RUNNING}${NC}"
         show_info "$db"
     else
-        echo -e "  Status: ${BD}${R}● parado${NC}"
+        echo -e "  Status: ${BD}${R}● ${MSG_STATUS_STOPPED}${NC}"
     fi
 }
 
@@ -232,19 +232,19 @@ show_info() {
             pass=$(grep -m1 "^PG_PASS=" "$dir/.env" | cut -d= -f2)
             dbname=$(grep -m1 "^PG_DB=" "$dir/.env" | cut -d= -f2)
         }
-        echo "  Host:     localhost"
-        echo "  Port:     $port"
-        echo "  Database: $dbname"
-        echo "  User:     $user"
-        echo "  Pass:     $pass"
+        echo "  ${MSG_INFO_HOST}     localhost"
+        echo "  ${MSG_INFO_PORT}     $port"
+        echo "  ${MSG_INFO_DATABASE} $dbname"
+        echo "  ${MSG_INFO_USER}     $user"
+        echo "  ${MSG_INFO_PASS}     $pass"
         echo ""
         echo "  Connect: psql -h localhost -p $port -U $user -d $dbname"
     elif [ "$db" = "dragonfly" ]; then
         local pass="dragonfly_dev_2026"
         [ -f "$dir/.env" ] && pass=$(grep -m1 "^DF_PASS=" "$dir/.env" | cut -d= -f2)
-        echo "  Host: localhost"
-        echo "  Port: $port"
-        echo "  Pass: $pass"
+        echo "  ${MSG_INFO_HOST} localhost"
+        echo "  ${MSG_INFO_PORT} $port"
+        echo "  ${MSG_INFO_PASS} $pass"
         echo ""
         echo "  Connect: redis-cli -h localhost -p $port -a $pass"
     elif [ "$db" = "mysql" ]; then
@@ -254,11 +254,11 @@ show_info() {
             pass=$(grep -m1 "^MY_PASS=" "$dir/.env" | cut -d= -f2)
             dbname=$(grep -m1 "^MY_DB=" "$dir/.env" | cut -d= -f2)
         }
-        echo "  Host:     localhost"
-        echo "  Port:     $port"
-        echo "  Database: $dbname"
-        echo "  User:     $user"
-        echo "  Pass:     $pass"
+        echo "  ${MSG_INFO_HOST}     localhost"
+        echo "  ${MSG_INFO_PORT}     $port"
+        echo "  ${MSG_INFO_DATABASE} $dbname"
+        echo "  ${MSG_INFO_USER}     $user"
+        echo "  ${MSG_INFO_PASS}     $pass"
         echo ""
         echo "  Connect: mysql -h localhost -P $port -u $user -p$pass $dbname"
     elif [ "$db" = "mariadb" ]; then
@@ -268,11 +268,11 @@ show_info() {
             pass=$(grep -m1 "^MA_PASS=" "$dir/.env" | cut -d= -f2)
             dbname=$(grep -m1 "^MA_DB=" "$dir/.env" | cut -d= -f2)
         }
-        echo "  Host:     localhost"
-        echo "  Port:     $port"
-        echo "  Database: $dbname"
-        echo "  User:     $user"
-        echo "  Pass:     $pass"
+        echo "  ${MSG_INFO_HOST}     localhost"
+        echo "  ${MSG_INFO_PORT}     $port"
+        echo "  ${MSG_INFO_DATABASE} $dbname"
+        echo "  ${MSG_INFO_USER}     $user"
+        echo "  ${MSG_INFO_PASS}     $pass"
         echo ""
         echo "  Connect: mysql -h localhost -P $port -u $user -p$pass $dbname"
     elif [ "$db" = "mongodb" ]; then
@@ -282,19 +282,19 @@ show_info() {
             pass=$(grep -m1 "^MO_PASS=" "$dir/.env" | cut -d= -f2)
             dbname=$(grep -m1 "^MO_DB=" "$dir/.env" | cut -d= -f2)
         }
-        echo "  Host:     localhost"
-        echo "  Port:     $port"
-        echo "  Database: $dbname"
-        echo "  User:     $user"
-        echo "  Pass:     $pass"
+        echo "  ${MSG_INFO_HOST}     localhost"
+        echo "  ${MSG_INFO_PORT}     $port"
+        echo "  ${MSG_INFO_DATABASE} $dbname"
+        echo "  ${MSG_INFO_USER}     $user"
+        echo "  ${MSG_INFO_PASS}     $pass"
         echo ""
         echo "  Connect: mongosh mongodb://$user:$pass@localhost:$port/$dbname"
     elif [ "$db" = "valkey" ]; then
         local pass="valkey_dev_2026"
         [ -f "$dir/.env" ] && pass=$(grep -m1 "^VK_PASS=" "$dir/.env" | cut -d= -f2)
-        echo "  Host: localhost"
-        echo "  Port: $port"
-        echo "  Pass: $pass"
+        echo "  ${MSG_INFO_HOST} localhost"
+        echo "  ${MSG_INFO_PORT} $port"
+        echo "  ${MSG_INFO_PASS} $pass"
         echo ""
         echo "  Connect: redis-cli -h localhost -p $port -a $pass"
     fi
@@ -303,20 +303,20 @@ show_info() {
 logs_db() {
     local db="$1" dir display
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2)
-    db_exists "$db" || { warn "$display não instalado"; return 1; }
+    db_exists "$db" || { warn "$display ${ERR_NOT_INSTALLED}"; return 1; }
 
-    info "Logs de $display (Ctrl+C pra sair)..."
+    info "${MSG_INFO_LOGS} (Ctrl+C pra sair)..."
     (cd "$dir" && docker compose logs -f --no-log-prefix)
 }
 
 shell_db() {
     local db="$1" dir display container
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
-    db_exists "$db" || { warn "$display não instalado"; return 1; }
+    db_exists "$db" || { warn "$display ${ERR_NOT_INSTALLED}"; return 1; }
 
     local st
     st=$(get_container_status "$container")
-    [ "$st" != "running" ] && { warn "$display não rodando. Use: $0 up $db"; return 1; }
+    [ "$st" != "running" ] && { warn "$display ${ERR_NOT_RUNNING}. Use: $0 up $db"; return 1; }
 
     (cd "$dir" && docker compose exec -it "$container" sh)
 }

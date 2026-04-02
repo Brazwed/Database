@@ -43,14 +43,14 @@ detect_vps_state() {
     local ports_in_use=()
 
     # ─── Sistema ──────────────────────────────────────────────
-    echo -e "  ${BD}Sistema${NC}"
+    echo -e "  ${BD}${MSG_DETECT_SYSTEM}${NC}"
 
     if has_docker; then
         local dver
         dver=$(docker --version 2>/dev/null | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
-        echo -e "    Docker:     ${G}● instalado${NC} (v${dver})"
+        echo -e "    Docker:     ${G}${BD}${G}● ${MSG_STATUS_INSTALLED}${NC}${NC} (v${dver})"
     else
-        echo -e "    Docker:     ${R}● não instalado${NC}"
+        echo -e "    Docker:     ${R}● ${DIM}${MSG_STATUS_NOT_INSTALLED}${NC}${NC}"
     fi
 
     # Containers resumidos
@@ -62,7 +62,7 @@ detect_vps_state() {
             db_containers="${db_containers}${name}"
         fi
     done <<< "$DATABASES"
-    echo "    Containers: ${db_containers:-nenhum}"
+    echo "    Containers: ${db_containers:-${MSG_DETECT_NONE}}"
 
     detect_firewall
     echo ""
@@ -71,7 +71,7 @@ detect_vps_state() {
     echo -e "  ${BD}${SEP}${NC}"
     echo ""
 
-    echo -e "  📦 ${BD}Bancos Persistentes (disco)${NC}"
+    echo -e "  📦 ${BD}${MSG_DETECT_PERSISTENT}${NC}"
     while IFS='|' read -r cat name display port repo container dir; do
         [ -z "$name" ] && continue
         [ "$cat" != "persistent" ] && continue
@@ -94,29 +94,29 @@ detect_vps_state() {
         if $installed; then
             if $port_used; then
                 if $port_ours; then
-                    printf "    %-18s :%-6s ${BD}${G}● instalado${NC}  ${G}porta em uso${NC}\n" "$display" "$port"
+                    printf "    %-18s :%-6s ${BD}${G}${BD}${G}● ${MSG_STATUS_INSTALLED}${NC}${NC}  ${G}${G}${MSG_STATUS_PORT_IN_USE}${NC}${NC}\n" "$display" "$port"
                 else
-                    printf "    %-18s :%-6s ${BD}${Y}● instalado${NC}  ${R}porta em uso por outro${NC}\n" "$display" "$port"
+                    printf "    %-18s :%-6s ${BD}${Y}${BD}${G}● ${MSG_STATUS_INSTALLED}${NC}${NC}  ${R}${G}${MSG_STATUS_PORT_IN_USE}${NC} por outro${NC}\n" "$display" "$port"
                     conflicts=true
                     ports_in_use+=("$port")
                 fi
             else
-                printf "    %-18s :%-6s ${BD}${Y}○ instalado${NC}  porta livre\n" "$display" "$port"
+                printf "    %-18s :%-6s ${BD}${Y}${BD}${Y}○ ${MSG_STATUS_INSTALLED}${NC}${NC}  ${MSG_STATUS_PORT_FREE}\n" "$display" "$port"
             fi
         else
             if $port_used; then
-                printf "    %-18s :%-6s ${R}porta em uso por outro${NC}\n" "$display" "$port"
+                printf "    %-18s :%-6s ${R}${G}${MSG_STATUS_PORT_IN_USE}${NC} por outro${NC}\n" "$display" "$port"
                 conflicts=true
                 ports_in_use+=("$port")
             else
-                printf "    %-18s :%-6s ${DIM}não instalado${NC}\n" "$display" "$port"
+                printf "    %-18s :%-6s ${DIM}${DIM}${MSG_STATUS_NOT_INSTALLED}${NC}${NC}\n" "$display" "$port"
             fi
         fi
     done <<< "$DATABASES"
     echo ""
 
     # ─── Cache ────────────────────────────────────────────────
-    echo -e "  ⚡ ${BD}Cache em Memória (RAM)${NC}"
+    echo -e "  ⚡ ${BD}${MSG_DETECT_MEMORY}${NC}"
     while IFS='|' read -r cat name display port repo container dir; do
         [ -z "$name" ] && continue
         [ "$cat" != "memory" ] && continue
@@ -139,22 +139,22 @@ detect_vps_state() {
         if $installed; then
             if $port_used; then
                 if $port_ours; then
-                    printf "    %-18s :%-6s ${BD}${G}● instalado${NC}  ${G}porta em uso${NC}\n" "$display" "$port"
+                    printf "    %-18s :%-6s ${BD}${G}${BD}${G}● ${MSG_STATUS_INSTALLED}${NC}${NC}  ${G}${G}${MSG_STATUS_PORT_IN_USE}${NC}${NC}\n" "$display" "$port"
                 else
-                    printf "    %-18s :%-6s ${BD}${Y}● instalado${NC}  ${R}porta em uso por outro${NC}\n" "$display" "$port"
+                    printf "    %-18s :%-6s ${BD}${Y}${BD}${G}● ${MSG_STATUS_INSTALLED}${NC}${NC}  ${R}${G}${MSG_STATUS_PORT_IN_USE}${NC} por outro${NC}\n" "$display" "$port"
                     conflicts=true
                     ports_in_use+=("$port")
                 fi
             else
-                printf "    %-18s :%-6s ${BD}${Y}○ instalado${NC}  porta livre\n" "$display" "$port"
+                printf "    %-18s :%-6s ${BD}${Y}${BD}${Y}○ ${MSG_STATUS_INSTALLED}${NC}${NC}  ${MSG_STATUS_PORT_FREE}\n" "$display" "$port"
             fi
         else
             if $port_used; then
-                printf "    %-18s :%-6s ${R}porta em uso por outro${NC}\n" "$display" "$port"
+                printf "    %-18s :%-6s ${R}${G}${MSG_STATUS_PORT_IN_USE}${NC} por outro${NC}\n" "$display" "$port"
                 conflicts=true
                 ports_in_use+=("$port")
             else
-                printf "    %-18s :%-6s ${DIM}não instalado${NC}\n" "$display" "$port"
+                printf "    %-18s :%-6s ${DIM}${DIM}${MSG_STATUS_NOT_INSTALLED}${NC}${NC}\n" "$display" "$port"
             fi
         fi
     done <<< "$DATABASES"
@@ -166,7 +166,7 @@ detect_vps_state() {
         echo ""
         local port_list
         port_list=$(IFS=', '; echo "${ports_in_use[*]}")
-        echo -e "  ${Y}[!] ${#ports_in_use[@]} porta(s) em uso por outro: ${port_list}${NC}"
+        echo -e "  ${Y}[!] ${#ports_in_use[@]} ${MSG_STATUS_PORT_CONFLICT}(s): ${port_list}${NC}"
         echo ""
     fi
 

@@ -12,7 +12,7 @@ create_backup() {
         local bk_dir="${BACKUP_DIR}/vps/${timestamp}"
         mkdir -p "$bk_dir"
 
-        spinner "Backup VPS"
+        spinner "${MSG_LOG_BACKUP_VPS}"
 
         if [ "$FW_TYPE" = "ufw" ]; then
             ufw status numbered > "$bk_dir/ufw.rules" 2>/dev/null || true
@@ -36,7 +36,7 @@ create_backup() {
 EOF
 
         ln -sfn "$bk_dir" "${BACKUP_DIR}/vps/latest"
-        log "Backup VPS salvo: ${timestamp}"
+        log "${LOG_BACKUP_VPS_SAVED/\$timestamp/${timestamp}}"
 
     else
         local dir display
@@ -44,19 +44,19 @@ EOF
         display=$(parse_db "$target" 2)
 
         if [ -z "$dir" ]; then
-            warn "Banco desconhecido para backup: '$target'"
+            warn "${ERR_UNKNOWN_BACKUP}: '$target'"
             return 1
         fi
 
         if [ ! -d "$dir" ] || [ ! -f "$dir/docker-compose.yml" ]; then
-            warn "$display não instalado, nada para fazer backup"
+            warn "$display ${ERR_NOTHING_BACKUP}"
             return 1
         fi
 
         local bk_dir="${BACKUP_DIR}/${target}/${timestamp}"
         mkdir -p "$bk_dir"
 
-        spinner "Backup de $display"
+        spinner "${MSG_LOG_BACKUP_DB}"
 
         [ -f "$dir/.env" ] && cp "$dir/.env" "$bk_dir/"
         [ -f "$dir/docker-compose.yml" ] && cp "$dir/docker-compose.yml" "$bk_dir/"
@@ -85,7 +85,7 @@ EOF
 EOF
 
         ln -sfn "$bk_dir" "${BACKUP_DIR}/${target}/latest"
-        log "Backup $display salvo: ${timestamp}"
+        log "${LOG_BACKUP_SAVED/\$timestamp/${timestamp}}"
     fi
 }
 
@@ -151,7 +151,7 @@ restore_backup() {
 
     if [ -z "$timestamp" ]; then
         if [ ! -L "$bk_path/latest" ]; then
-            warn "Nenhum backup encontrado para $target"
+            warn "${ERR_NO_BACKUP_DB/\$db_name/$target}"
             return 1
         fi
         bk_path=$(readlink -f "$bk_path/latest")
@@ -161,7 +161,7 @@ restore_backup() {
     fi
 
     if [ ! -d "$bk_path" ]; then
-        warn "Backup não encontrado: $timestamp"
+        warn "${ERR_BACKUP_NOT_FOUND/\$timestamp/$timestamp}"
         return 1
     fi
 
@@ -169,22 +169,22 @@ restore_backup() {
     if [ "$target" != "vps" ]; then
         display=$(parse_db "$target" 2)
         if [ -z "$display" ]; then
-            warn "Banco desconhecido para restore: '$target'"
+            warn "${ERR_UNKNOWN_RESTORE}: '$target'"
             return 1
         fi
     else
         display="VPS"
     fi
 
-    warn "Restaurar $display do backup $timestamp?"
-    confirm "Certeza?" || return 0
+    warn "${MSG_BK_RESTORE_CONFIRM} $timestamp?"
+    confirm "${PROMPT_ARE_YOU_SURE}" || return 0
 
     if [ "$target" != "vps" ]; then
         local dir
         dir=$(parse_db "$target" 6)
 
         if [ -z "$dir" ]; then
-            warn "Banco desconhecido para restore: '$target'"
+            warn "${ERR_UNKNOWN_RESTORE}: '$target'"
             return 1
         fi
 
@@ -198,9 +198,9 @@ restore_backup() {
         container=$(parse_db "$target" 5)
         local st
         st=$(get_container_status "$container")
-        [ "$st" = "running" ] && spinner "Parando $display" && (cd "$dir" && docker compose down --timeout 10 2>&1)
+        [ "$st" = "running" ] && spinner "${MSG_LOG_RESTORE_STOP}" && (cd "$dir" && docker compose down --timeout 10 2>&1)
 
-        spinner "Restaurando $display"
+        spinner "${MSG_LOG_RESTORE_RESTORE}"
         [ -f "$bk_path/.env" ] && cp "$bk_path/.env" "$dir/"
         [ -f "$bk_path/docker-compose.yml" ] && cp "$bk_path/docker-compose.yml" "$dir/"
         if [ -d "$bk_path/data" ]; then
@@ -211,7 +211,7 @@ restore_backup() {
         (cd "$dir" && docker compose up -d 2>&1)
         sleep 2
 
-        log "$display restaurado do backup $timestamp"
+        log "${LOG_RESTORED/\$timestamp/$timestamp}"
         show_info "$target"
     else
         info "Backup VPS: $bk_path"

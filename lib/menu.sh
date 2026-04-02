@@ -6,7 +6,7 @@ select_installed_db() {
     installed_raw=$(get_installed_list)
 
     if [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
-        warn "Nenhum banco instalado" >&2; return 1
+        warn "${MSG_MGR_NONE_INSTALLED}" >&2; return 1
     fi
 
     echo "" >&2
@@ -16,7 +16,7 @@ select_installed_db() {
         echo "  [$idx] $display" >&2
         names+=("$name"); idx=$((idx + 1))
     done <<< "$installed_raw"
-    echo "  [0] Voltar" >&2
+    echo "  [0] ${MSG_MENU_VOLTAR}" >&2
     echo "" >&2
 
     read -rp "  $prompt: " ch >&2
@@ -25,14 +25,14 @@ select_installed_db() {
     if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#names[@]}" ] 2>/dev/null; then
         echo "${names[$((ch - 1))]}"; return 0
     fi
-    warn "Inválido" >&2; return 1
+    warn "${ERR_INVALID_OPTION}" >&2; return 1
 }
 
 submenu_install() {
     while true; do
         clear
         echo ""
-        echo -e "  ${BD}${C}← Instalar${NC}"
+        echo -e "  ${BD}${C}${MSG_MENU_INSTALL}${NC}"
         echo ""
         echo "  O que você quer instalar?"
         echo ""
@@ -40,9 +40,9 @@ submenu_install() {
         local idx=1 docker_idx="" docker_opt=false
 
         if ! has_docker; then
-            echo "    [1] Docker Engine + Compose"
+            echo "    [1] ${MSG_MENU_DOCKER_OPTION}"
             echo ""
-            echo "  Necessário pra rodar os bancos."
+            echo "  ${MSG_MENU_DOCKER_DESC}"
             echo ""
             docker_idx=1; docker_opt=true; idx=$((idx + 1))
         fi
@@ -52,7 +52,7 @@ submenu_install() {
         while IFS='|' read -r cat name display port _; do
             [ -z "$name" ] && continue
             if db_exists "$name"; then
-                echo -e "    [$idx] $display (porta $port) ${G}já instalado${NC}"
+                echo -e "    [$idx] $display (porta $port) ${G}${MSG_INST_ALREADY}${NC}"
             else
                 echo "    [$idx] $display (porta $port)"
             fi
@@ -60,11 +60,11 @@ submenu_install() {
         done <<< "$DATABASES"
 
         echo ""
-        echo "    [0] ← Voltar ao menu principal"
+        echo "    [0] ← ${MSG_MENU_VOLTAR_MAIN}"
         echo ""
 
         flush_stdin
-        read -rp "  Escolha: " choice
+        read -rp "  ${MSG_MENU_CHOOSE}" choice
         [ "$choice" = "0" ] && return
 
         if [ "$docker_opt" = "true" ] && [ "$choice" = "$docker_idx" ]; then
@@ -78,7 +78,7 @@ submenu_install() {
             install_db "${db_names[$((adj - 1))]}"; pause; continue
         fi
 
-        warn "Opção inválida"
+        warn "${ERR_INVALID_OPTION}"
     done
 }
 
@@ -86,14 +86,14 @@ submenu_manage() {
     while true; do
         clear
         echo ""
-        echo -e "  ${BD}${C}← Gerenciar bancos${NC}"
+        echo -e "  ${BD}${C}${MSG_MENU_MANAGE}${NC}"
         echo ""
 
         local installed_raw
         installed_raw=$(get_installed_list)
 
         if [ -z "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
-            echo "  Nenhum banco instalado."
+            echo "  ${MSG_MGR_NONE_INSTALLED}."
             echo ""; pause; return
         fi
 
@@ -113,19 +113,19 @@ submenu_manage() {
         echo ""
         echo -e "  ${BD}O que fazer?${NC}"
         echo ""
-        echo "    [U] Atualizar (git pull + restart/up)"
-        echo "    [D] Parar (docker compose down)"
-        echo "    [C] Conectar (psql, mysql, redis-cli...)"
-        echo "    [S] Status (detalhes + conexão)"
-        echo "    [L] Logs (acompanhar em tempo real)"
-        echo "    [B] Backup (criar backup manual)"
-        echo "    [R] Rollback (restaurar backup)"
-        echo "    [X] Remover (deletar tudo)"
-        echo "    [0] ← Voltar ao menu principal"
+        echo "    ${MSG_MGR_UPDATE}"
+        echo "    ${MSG_MGR_STOP}"
+        echo "    ${MSG_MGR_CONNECT}"
+        echo "    ${MSG_MGR_STATUS}"
+        echo "    ${MSG_MGR_LOGS}"
+        echo "    ${MSG_MGR_BACKUP}"
+        echo "    ${MSG_MGR_ROLLBACK}"
+        echo "    ${MSG_MGR_REMOVE}"
+        echo "    [0] ← ${MSG_MENU_VOLTAR_MAIN}"
         echo ""
 
         flush_stdin
-        read -rp "  Escolha: " action
+        read -rp "  ${MSG_MENU_CHOOSE}" action
         [ "$action" = "0" ] && return
         action=$(echo "$action" | tr '[:upper:]' '[:lower:]')
 
@@ -158,7 +158,7 @@ submenu_manage() {
                restore_backup "$db_name"; pause ;;
             x) db_name=$(select_installed_db "Qual banco remover?") || continue
                remove_db "$db_name"; pause ;;
-            *) warn "Opção inválida" ;;
+            *) warn "${ERR_INVALID_OPTION}" ;;
         esac
     done
 }
@@ -167,34 +167,34 @@ submenu_backups() {
     while true; do
         clear
         echo ""
-        echo -e "  ${BD}${C}← Backups${NC}"
+        echo -e "  ${BD}${C}${MSG_MENU_BACKUPS}${NC}"
         echo ""
 
-        echo "    [1] Listar todos os backups"
-        echo "    [2] Listar backups por banco"
-        echo "    [3] Criar backup manual"
-        echo "    [4] Restaurar backup"
-        echo "    [0] ← Voltar ao menu principal"
+        echo "    [1] ${MSG_BK_LIST_ALL}"
+        echo "    [2] ${MSG_BK_LIST_BY_DB}"
+        echo "    [3] ${MSG_BK_CREATE}"
+        echo "    [4] ${MSG_BK_RESTORE}"
+        echo "    [0] ← ${MSG_MENU_VOLTAR_MAIN}"
         echo ""
 
         flush_stdin
-        read -rp "  Escolha: " choice
+        read -rp "  ${MSG_MENU_CHOOSE}" choice
 
         case "$choice" in
             1) list_backups "all"; pause ;;
             2)
                 echo ""
-                echo "  Qual banco?"
+                echo "  ${PROMPT_WHICH_DB}"
                 local idx=1 db_names=()
                 while IFS='|' read -r cat name display _; do
                     [ -z "$name" ] && continue
                     echo "    [$idx] $display"
                     db_names+=("$name"); idx=$((idx + 1))
                 done <<< "$DATABASES"
-                echo "    [0] Voltar"
+                echo "    [0] ${MSG_MENU_VOLTAR}"
                 echo ""
         flush_stdin
-                read -rp "  Escolha: " ch
+                read -rp "  ${MSG_MENU_CHOOSE}" ch
                 [ "$ch" = "0" ] && continue
                 if [ "$ch" -ge 1 ] 2>/dev/null && [ "$ch" -le "${#db_names[@]}" ] 2>/dev/null; then
                     list_backups "${db_names[$((ch - 1))]}"
@@ -203,13 +203,13 @@ submenu_backups() {
                 ;;
             3)
                 echo ""
-                echo "  O que fazer backup?"
-                echo "    [1] Banco específico"
-                echo "    [2] Estado da VPS"
-                echo "    [0] Voltar"
+                echo "  ${MSG_BK_WHAT_BACKUP}"
+                echo "    [1] ${MSG_BK_DB_SPECIFIC}"
+                echo "    [2] ${MSG_BK_VPS_STATE}"
+                echo "    [0] ${MSG_MENU_VOLTAR}"
                 echo ""
         flush_stdin
-                read -rp "  Escolha: " bk_ch
+                read -rp "  ${MSG_MENU_CHOOSE}" bk_ch
                 case "$bk_ch" in
                     1)
                         local db_name
@@ -225,7 +225,7 @@ submenu_backups() {
 
                 local bk_path="${BACKUP_DIR}/${db_name}"
                 if [ ! -d "$bk_path" ]; then
-                    warn "Nenhum backup para $db_name"; pause; continue
+                    warn  "${ERR_NO_BACKUP_DB} $db_name"; pause; continue
                 fi
 
                 echo ""
@@ -241,13 +241,13 @@ submenu_backups() {
                 done
 
                 if [ "$bk_idx" -eq 1 ]; then
-                    warn "Nenhum backup encontrado"; pause; continue
+                    warn "${ERR_NO_BACKUP}"; pause; continue
                 fi
 
-                echo "    [0] Voltar"
+                echo "    [0] ${MSG_MENU_VOLTAR}"
                 echo ""
         flush_stdin
-                read -rp "  Escolha: " bk_ch
+                read -rp "  ${MSG_MENU_CHOOSE}" bk_ch
                 [ "$bk_ch" = "0" ] && continue
 
                 if [ "$bk_ch" -ge 1 ] 2>/dev/null && [ "$bk_ch" -lt "$bk_idx" ] 2>/dev/null; then
@@ -256,7 +256,7 @@ submenu_backups() {
                 pause
                 ;;
             0) return ;;
-            *) warn "Opção inválida" ;;
+            *) warn "${ERR_INVALID_OPTION}" ;;
         esac
     done
 }
@@ -274,7 +274,7 @@ show_main_menu() {
     echo -e "  ${BD}${C}╚══════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    echo -e "  ${BD}Sistema${NC}"
+    echo -e "  ${BD}${MSG_MENU_SISTEMA}${NC}"
     if has_docker; then
         local dver
         dver=$(docker --version 2>/dev/null | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
@@ -310,10 +310,10 @@ show_main_menu() {
     for item in "${persistent_items[@]}"; do
         local name display port st
         IFS='|' read -r name display port st <<< "$item"
-        local color="${BD}${Y}" tag="não instalado"
+        local color="${BD}${Y}" tag="${MSG_STATUS_NOT_INSTALLED}"
         case "$st" in
-            running) color="${BD}${G}"; tag="rodando" ;;
-            stopped) color="${BD}${R}"; tag="parado" ;;
+            running) color="${BD}${G}"; tag="${MSG_STATUS_RUNNING}" ;;
+            stopped) color="${BD}${R}"; tag="${MSG_STATUS_STOPPED}" ;;
         esac
         echo -e "    ${display}   :${port}   ${color}● ${tag}${NC}"
     done
@@ -323,10 +323,10 @@ show_main_menu() {
     for item in "${memory_items[@]}"; do
         local name display port st
         IFS='|' read -r name display port st <<< "$item"
-        local color="${BD}${Y}" tag="não instalado"
+        local color="${BD}${Y}" tag="${MSG_STATUS_NOT_INSTALLED}"
         case "$st" in
-            running) color="${BD}${G}"; tag="rodando" ;;
-            stopped) color="${BD}${R}"; tag="parado" ;;
+            running) color="${BD}${G}"; tag="${MSG_STATUS_RUNNING}" ;;
+            stopped) color="${BD}${R}"; tag="${MSG_STATUS_STOPPED}" ;;
         esac
         echo -e "    ${display}   :${port}   ${color}● ${tag}${NC}"
     done
@@ -335,12 +335,12 @@ show_main_menu() {
     echo -e "  ${BD}${SEP}${NC}"
     echo ""
 
-    echo -e "  📋 ${BD}Comandos${NC}"
+    echo -e "  📋 ${BD}${MSG_MENU_COMANDOS}${NC}"
     echo ""
-    echo "    [1] Instalar        preparar ambiente ou banco(s)"
-    echo "    [2] Gerenciar       atualizar, parar, status, remover"
-    echo "    [3] Backups         criar, listar, restaurar"
-    echo "    [0] Sair"
+    echo "    [1] ${MSG_MENU_INSTALL}        prepare environment or database(s)"
+    echo "    [2] ${MSG_MENU_MANAGE}       update, stop, status, remove"
+    echo "    [3] ${MSG_MENU_BACKUPS}         create, list, restore"
+    echo "    [0] ${MSG_MENU_SAIR}"
     echo ""
 }
 
@@ -348,7 +348,7 @@ interactive_menu() {
     while true; do
         show_main_menu
         flush_stdin
-        read -rp "  Escolha: " choice
+        read -rp "  ${MSG_MENU_CHOOSE}" choice
 
         case "$choice" in
             1) submenu_install ;;
@@ -358,13 +358,13 @@ interactive_menu() {
                 if [ -n "$(echo "$installed_raw" | tr -d '[:space:]')" ]; then
                     submenu_manage
                 else
-                    warn "Nenhum banco instalado. Use [1] primeiro."
+                    warn "${MSG_MGR_NONE_INSTALLED} [1] ${MSG_MENU_INSTALL}."
                     pause
                 fi
                 ;;
             3) submenu_backups ;;
-            0) echo ""; log "Até mais!"; exit 0 ;;
-            *) warn "Opção inválida: $choice" ;;
+            0) echo ""; log "${LOG_GOODBYE}"; exit 0 ;;
+            *) warn "${ERR_INVALID_OPTION}: $choice" ;;
         esac
     done
 }

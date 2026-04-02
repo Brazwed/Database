@@ -6,42 +6,42 @@ ask_firewall_choice() {
     if [ "$FW_ACTIVE" = "false" ]; then
         echo "  Nenhum firewall ativo."
         echo ""
-        echo "    [1] Instalar UFW"
-        echo "    [2] Usar iptables"
-        echo "    [3] Não alterar firewall"
+        echo "    ${MSG_FW_INSTALL_UFW}"
+        echo "    ${MSG_FW_USE_IPTABLES}"
+        echo "    ${MSG_FW_DONT_CHANGE}"
         echo ""
-        read -rp "  Escolha: " fw_ch
+        read -rp "  ${PROMPT_CHOICE}" fw_ch
 
         case "$fw_ch" in
             1)
                 if ! apt-get install -y ufw >/dev/null 2>&1; then
-                    warn "Falha ao instalar UFW"; return 1
+                    warn "${MSG_FW_FAIL_INSTALL}"; return 1
                 fi
                 if ! ufw default deny incoming >/dev/null 2>&1; then
-                    warn "Falha ao configurar UFW"; return 1
+                    warn "${MSG_FW_FAIL_CONFIG}"; return 1
                 fi
                 ufw default allow outgoing >/dev/null 2>&1 || true
                 ufw allow 22/tcp comment "SSH" >/dev/null 2>&1 || true
                 if ! ufw --force enable >/dev/null 2>&1; then
-                    warn "Falha ao ativar UFW"; return 1
+                    warn "${MSG_FW_FAIL_ENABLE}"; return 1
                 fi
                 FW_TYPE="ufw"; FW_ACTIVE=true
-                log "UFW instalado e ativado"
+                log "${MSG_FW_UFW_INSTALLED}"
                 ;;
             2)
                 FW_TYPE="iptables"; FW_ACTIVE=true
                 iptables -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT 2>/dev/null || true
                 iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
-                log "iptables configurado"
+                log "${MSG_FW_IPTABLES_SET}"
                 ;;
             *)
-                info "Firewall não alterado"
+                info "${MSG_FW_CANCELLED}"
                 return 1
                 ;;
         esac
     fi
 
-    read -rp "  Liberar porta no firewall? [Y/n] " fw_go
+    read -rp "  ${MSG_FW_OPEN_PORT}" fw_go
     [[ "$fw_go" =~ ^[nN]$ ]] && return 1
 
     local alt_tool="iptables"; [ "$FW_TYPE" = "iptables" ] && alt_tool="ufw"
@@ -50,7 +50,7 @@ ask_firewall_choice() {
         echo "    [1] ${FW_TYPE}"
         echo "    [2] ${alt_tool}"
         echo ""
-        read -rp "  Qual usar? [1/2]: " fw_pick
+        read -rp "  ${MSG_FW_WHICH}" fw_pick
         if [ "$fw_pick" = "2" ]; then
             FW_TYPE="$alt_tool"
         fi
@@ -63,8 +63,8 @@ open_port() {
     local port="$1" comment="${2:-Database}"
 
     if [ "$FW_TYPE" = "ufw" ]; then
-        ufw allow "$port/tcp" comment "$comment" >/dev/null 2>&1 || warn "Falha ao liberar porta $port no UFW"
+        ufw allow "$port/tcp" comment "$comment" >/dev/null 2>&1 || warn "${MSG_FW_FAIL_OPEN_UFW}"
     elif [ "$FW_TYPE" = "iptables" ]; then
-        iptables -A INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || warn "Falha ao liberar porta $port no iptables"
+        iptables -A INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || warn "${MSG_FW_FAIL_OPEN_IPTABLES}"
     fi
 }

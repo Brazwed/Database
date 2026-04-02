@@ -23,9 +23,9 @@ flush_stdin() {
 
 confirm() {
     if [ "$AUTO_YES" = "true" ]; then return 0; fi
-    read -rp "${1:-Confirmar?} [Y/n] " c; [[ -z "$c" || "$c" =~ ^[yY]$ ]]
+    read -rp "${1:-${PROMPT_CONFIRM}} " c; [[ -z "$c" || "$c" =~ ^[yY]$ ]]
 }
-pause()   { if [ "$AUTO_YES" = "true" ]; then return; fi; read -rp "  Pressione Enter..." _; }
+pause()   { if [ "$AUTO_YES" = "true" ]; then return; fi; read -rp "  ${PROMPT_ENTER}" _; }
 
 has_docker() { command -v docker &>/dev/null && docker info &>/dev/null; }
 

@@ -12,6 +12,18 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # Flags
 AUTO_YES=false
 
+# Language detection
+CONFIG_DIR="${HOME}/.db-toolkit"
+DT_LANG="en_US"
+if [ -f "${CONFIG_DIR}/lang" ]; then
+    DT_LANG=$(cat "${CONFIG_DIR}/lang")
+else
+    case "${LANG:-en_US}" in
+        pt_*|br_*) DT_LANG="pt_BR" ;;
+    esac
+fi
+source "${SCRIPT_DIR}/lib/lang/${DT_LANG}.sh" 2>/dev/null || source "${SCRIPT_DIR}/lib/lang/en_US.sh"
+
 # Configuração
 GITHUB_BASE="${GITHUB_BASE:-https://github.com/Brazwed}"
 BACKUP_DIR="${HOME}/.db-toolkit/backups"
@@ -109,6 +121,14 @@ parse_args() {
             ;;
         detect)
             detect_vps_state
+            ;;
+        lang)
+            mkdir -p "$CONFIG_DIR"
+            case "${args:-}" in
+                pt|pt_BR) echo "pt_BR" > "${CONFIG_DIR}/lang"; log "$LOG_LANG_CHANGED" ;;
+                en|en_US) echo "en_US" > "${CONFIG_DIR}/lang"; log "$LOG_LANG_CHANGED" ;;
+                *) err "Uso: $0 lang <pt|en>" ;;
+            esac
             ;;
         backup)
             if [ -z "$args" ] || [ "$args" = "all" ]; then
