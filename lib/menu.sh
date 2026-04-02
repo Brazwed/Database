@@ -34,7 +34,7 @@ submenu_install() {
         echo ""
         echo -e "  ${BD}${C}${MSG_MENU_INSTALL}${NC}"
         echo ""
-        echo "  O que você quer instalar?"
+        echo "  ${MSG_MENU_WHAT_TO_INSTALL}"
         echo ""
 
         local idx=1 docker_idx="" docker_opt=false
@@ -52,9 +52,9 @@ submenu_install() {
         while IFS='|' read -r cat name display port _; do
             [ -z "$name" ] && continue
             if db_exists "$name"; then
-                echo -e "    [$idx] $display (porta $port) ${G}${MSG_INST_ALREADY}${NC}"
+                echo -e "    [$idx] $display (port $port) ${G}${MSG_INST_ALREADY}${NC}"
             else
-                echo "    [$idx] $display (porta $port)"
+                echo "    [$idx] $display (port $port)"
             fi
             db_names+=("$name"); idx=$((idx + 1))
         done <<< "$DATABASES"
@@ -97,15 +97,15 @@ submenu_manage() {
             echo ""; pause; return
         fi
 
-        echo -e "  ${BD}Bancos instalados:${NC}"
+        echo -e "  ${BD}${MSG_MGR_INSTALLED}${NC}"
         echo ""
         local names=()
         while IFS='|' read -r name display port status dir; do
             [ -z "$name" ] && continue
             if [ "$status" = "running" ]; then
-                echo -e "    ${G}●${NC} $display (porta $port) rodando"
+                echo -e "    ${G}●${NC} $display (port $port) ${MSG_STATUS_RUNNING}"
             else
-                echo -e "    ${R}●${NC} $display (porta $port) parado"
+                echo -e "    ${R}●${NC} $display (port $port) ${MSG_STATUS_STOPPED}"
             fi
             names+=("$name")
         done <<< "$installed_raw"
@@ -131,9 +131,9 @@ submenu_manage() {
 
         local db_name
         case "$action" in
-            u) db_name=$(select_installed_db "Qual banco atualizar?") || continue
+            u) db_name=$(select_installed_db "${PROMPT_WHICH_DB_UPDATE}") || continue
                update_db "$db_name"; pause ;;
-            d) db_name=$(select_installed_db "Qual banco parar?") || continue
+            d) db_name=$(select_installed_db "${PROMPT_WHICH_DB_STOP}") || continue
                stop_db "$db_name"; pause ;;
             c)
                 local running_names=()
@@ -143,20 +143,20 @@ submenu_manage() {
                     [ "$st" = "running" ] && running_names+=("$n")
                 done
                 if [ ${#running_names[@]} -eq 0 ]; then
-                    warn "Nenhum banco rodando"; pause; continue
+                    warn "Nenhum banco ${MSG_STATUS_RUNNING}"; pause; continue
                 fi
-                db_name=$(select_installed_db "Qual banco conectar?") || continue
+                db_name=$(select_installed_db "${PROMPT_WHICH_DB_CONNECT}") || continue
                 shell_db "$db_name" ;;
             s)
                 for name in "${names[@]}"; do status_db "$name"; done
                 pause ;;
-            l) db_name=$(select_installed_db "Qual banco ver logs?") || continue
+            l) db_name=$(select_installed_db "${PROMPT_WHICH_DB_LOGS}") || continue
                logs_db "$db_name" ;;
-            b) db_name=$(select_installed_db "Qual banco fazer backup?") || continue
+            b) db_name=$(select_installed_db "${PROMPT_WHICH_DB_BACKUP}") || continue
                create_backup "$db_name" "manual"; pause ;;
-            r) db_name=$(select_installed_db "Qual banco restaurar?") || continue
+            r) db_name=$(select_installed_db "${PROMPT_WHICH_DB_RESTORE}") || continue
                restore_backup "$db_name"; pause ;;
-            x) db_name=$(select_installed_db "Qual banco remover?") || continue
+            x) db_name=$(select_installed_db "${PROMPT_WHICH_DB_REMOVE}") || continue
                remove_db "$db_name"; pause ;;
             *) warn "${ERR_INVALID_OPTION}" ;;
         esac
@@ -213,7 +213,7 @@ submenu_backups() {
                 case "$bk_ch" in
                     1)
                         local db_name
-                        db_name=$(select_installed_db "Qual banco?") || continue
+                        db_name=$(select_installed_db "${PROMPT_WHICH_DB}") || continue
                         create_backup "$db_name" "manual"; pause
                         ;;
                     2) create_backup "vps" "manual"; pause ;;
@@ -221,7 +221,7 @@ submenu_backups() {
                 ;;
             4)
                 local db_name
-                db_name=$(select_installed_db "Qual banco restaurar?") || continue
+                db_name=$(select_installed_db "${PROMPT_WHICH_DB_RESTORE}") || continue
 
                 local bk_path="${BACKUP_DIR}/${db_name}"
                 if [ ! -d "$bk_path" ]; then
@@ -278,9 +278,9 @@ show_main_menu() {
     if has_docker; then
         local dver
         dver=$(docker --version 2>/dev/null | sed -n 's/.*\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/p' | head -1)
-        echo -e "    Docker:    ${G}● instalado${NC} (v${dver})"
+        echo -e "    Docker:    ${G}● ${MSG_STATUS_INSTALLED}${NC} (v${dver})"
     else
-        echo -e "    Docker:    ${R}● não instalado${NC}"
+        echo -e "    Docker:    ${R}● ${MSG_STATUS_NOT_INSTALLED}${NC}"
     fi
     echo ""
 

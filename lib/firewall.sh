@@ -4,7 +4,7 @@ ask_firewall_choice() {
     echo ""
 
     if [ "$FW_ACTIVE" = "false" ]; then
-        echo "  Nenhum firewall ativo."
+        echo "  ${MSG_FW_NO_FIREWALL}"
         echo ""
         echo "    ${MSG_FW_INSTALL_UFW}"
         echo "    ${MSG_FW_USE_IPTABLES}"

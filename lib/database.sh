@@ -5,7 +5,7 @@ install_db() {
     local display default_port repo container dir port
 
     if ! db_info_valid "$db"; then
-        err "${ERR_UNKNOWN_DB/\$db/$db}"
+        err "${ERR_UNKNOWN_DB}: $db"
     fi
 
     display=$(parse_db "$db" 2)
@@ -52,7 +52,7 @@ install_db() {
 
     if ask_firewall_choice; then
         open_port "$port" "$display"
-        log "${LOG_PORT_OPENED}"
+        log "${LOG_PORT_OPENED} $port"
     fi
 
     # Check disk space (need at least 500MB)
@@ -131,7 +131,7 @@ start_db() {
 
     local st
     st=$(get_container_status "$container")
-    [ "$st" = "running" ] && log "${LOG_STARTED}" || warn "$display ${ERR_WONT_START}"
+    [ "$st" = "running" ] && log "$display ${LOG_STARTED}" || warn "$display ${ERR_WONT_START}"
 }
 
 stop_db() {
@@ -182,7 +182,7 @@ remove_db() {
     dir=$(parse_db "$db" 6); display=$(parse_db "$db" 2); container=$(parse_db "$db" 5)
     db_exists "$db" || { warn "$display ${ERR_NOT_INSTALLED}"; return 1; }
 
-    warn "${ERR_PARAR_REMOVER}"
+    warn "${ERR_PARAR_REMOVER} $display"
     confirm "${PROMPT_ARE_YOU_SURE}" || return 0
 
     create_backup "$db" "before-remove"

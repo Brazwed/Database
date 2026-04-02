@@ -10,7 +10,7 @@ detect_firewall() {
             FW_ACTIVE=true
             local rules
             rules=$(ufw status 2>/dev/null | grep -c "ALLOW" || echo "0")
-            echo -e "    Firewall:  ${G}UFW${NC} (${rules} regras)"
+            echo -e "    Firewall:  ${G}UFW${NC} (${rules} rules)"
             return
         fi
     fi
@@ -21,12 +21,12 @@ detect_firewall() {
         if [ "$ipt_rules" -gt 2 ]; then
             FW_TYPE="iptables"
             FW_ACTIVE=true
-            echo -e "    Firewall:  ${G}iptables${NC} (${ipt_rules} regras)"
+            echo -e "    Firewall:  ${G}iptables${NC} (${ipt_rules} rules)"
             return
         fi
     fi
 
-    echo -e "    Firewall:  ${Y}nenhum${NC}"
+    echo -e "    Firewall:  ${Y}${MSG_DETECT_NONE}${NC}"
 }
 
 detect_vps_state() {

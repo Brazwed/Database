@@ -36,7 +36,7 @@ create_backup() {
 EOF
 
         ln -sfn "$bk_dir" "${BACKUP_DIR}/vps/latest"
-        log "${LOG_BACKUP_VPS_SAVED/\$timestamp/${timestamp}}"
+        log "${LOG_BACKUP_VPS_SAVED}: ${timestamp}"
 
     else
         local dir display
@@ -44,7 +44,7 @@ EOF
         display=$(parse_db "$target" 2)
 
         if [ -z "$dir" ]; then
-            warn "${ERR_UNKNOWN_BACKUP}: '$target'"
+            warn "${ERR_UNKNOWN_BACKUP} '$target'"
             return 1
         fi
 
@@ -56,7 +56,7 @@ EOF
         local bk_dir="${BACKUP_DIR}/${target}/${timestamp}"
         mkdir -p "$bk_dir"
 
-        spinner "${MSG_LOG_BACKUP_DB}"
+        spinner "${MSG_LOG_BACKUP_DB} $display"
 
         [ -f "$dir/.env" ] && cp "$dir/.env" "$bk_dir/"
         [ -f "$dir/docker-compose.yml" ] && cp "$dir/docker-compose.yml" "$bk_dir/"
@@ -85,7 +85,7 @@ EOF
 EOF
 
         ln -sfn "$bk_dir" "${BACKUP_DIR}/${target}/latest"
-        log "${LOG_BACKUP_SAVED/\$timestamp/${timestamp}}"
+        log "${LOG_BACKUP_SAVED}: ${timestamp}"
     fi
 }
 
@@ -119,7 +119,7 @@ list_backups() {
             echo "  Nenhum backup encontrado."
         fi
     else
-        echo -e "  ${BD}${C}Todos os backups:${NC}"
+        echo -e "  ${BD}${C}${MSG_BK_ALL_BACKUPS}${NC}"
         echo ""
 
         local any=false
@@ -169,14 +169,14 @@ restore_backup() {
     if [ "$target" != "vps" ]; then
         display=$(parse_db "$target" 2)
         if [ -z "$display" ]; then
-            warn "${ERR_UNKNOWN_RESTORE}: '$target'"
+            warn "${ERR_UNKNOWN_RESTORE} '$target'"
             return 1
         fi
     else
         display="VPS"
     fi
 
-    warn "${MSG_BK_RESTORE_CONFIRM} $timestamp?"
+    warn "${MSG_BK_RESTORE_CONFIRM} $display?"
     confirm "${PROMPT_ARE_YOU_SURE}" || return 0
 
     if [ "$target" != "vps" ]; then
@@ -184,7 +184,7 @@ restore_backup() {
         dir=$(parse_db "$target" 6)
 
         if [ -z "$dir" ]; then
-            warn "${ERR_UNKNOWN_RESTORE}: '$target'"
+            warn "${ERR_UNKNOWN_RESTORE} '$target'"
             return 1
         fi
 
@@ -198,9 +198,9 @@ restore_backup() {
         container=$(parse_db "$target" 5)
         local st
         st=$(get_container_status "$container")
-        [ "$st" = "running" ] && spinner "${MSG_LOG_RESTORE_STOP}" && (cd "$dir" && docker compose down --timeout 10 2>&1)
+        [ "$st" = "running" ] && spinner "${MSG_LOG_RESTORE_STOP} $display" && (cd "$dir" && docker compose down --timeout 10 2>&1)
 
-        spinner "${MSG_LOG_RESTORE_RESTORE}"
+        spinner "${MSG_LOG_RESTORE_RESTORE} $display"
         [ -f "$bk_path/.env" ] && cp "$bk_path/.env" "$dir/"
         [ -f "$bk_path/docker-compose.yml" ] && cp "$bk_path/docker-compose.yml" "$dir/"
         if [ -d "$bk_path/data" ]; then
