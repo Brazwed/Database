@@ -10,7 +10,9 @@
 # Internal planning docs (não vai pro git)
 *.md
 !README.md
+!CONTRIBUTING.md
 !db-*/README.md
+!.github/ISSUE_TEMPLATE/*.md
 !lib/*.sh
 
 # OS files
